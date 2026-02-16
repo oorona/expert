@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "A concise, human-friendly knowledge-base article title (max 80 chars). Must describe the PROBLEM and SOLUTION area, not the raw error. NEVER include timestamps, dates, SQL statements, file paths, trace file names, or raw error text. Good examples: 'Resolving ORA-04031 Shared Pool Memory Allocation Failure', 'Troubleshooting ORA-01555 Snapshot Too Old During Long-Running Queries', 'Fixing Nginx 502 Bad Gateway After Upstream Timeout'. Bad examples: 'Tue Feb 17 09:12:44 2026 ORA-04031...', 'Error in /u01/app/oracle/...', 'SELECT SUM(ORDER_TOTAL) FROM...'"
+    },
+    "error_summary": {
+      "type": "string",
+      "description": "A concise one-line summary of the error"
+    },
+    "severity": {
+      "type": "string",
+      "description": "Severity level: critical, high, medium, or low",
+      "enum": ["critical", "high", "medium", "low"]
+    },
+    "root_cause": {
+      "type": "string",
+      "description": "Detailed explanation of the root cause"
+    },
+    "affected_systems": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of systems or components affected by this error"
+    },
+    "resolution_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Brief description of what this step accomplishes (1-2 sentences)"
+          },
+          "command": {
+            "type": "string",
+            "description": "The EXACT executable command, SQL statement, config change, or CLI invocation for this step. Must be copy-paste ready. Use code formatting. For config changes show the full parameter line. NEVER leave this empty."
+          }
+        },
+        "required": ["action", "command"]
+      },
+      "description": "Ordered list of resolution steps. Each step MUST have an 'action' explaining what to do AND a 'command' with the exact executable command/SQL/config. Never provide an action without its corresponding command."
+    },
+    "preventive_measures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Brief description of the preventive measure"
+          },
+          "command": {
+            "type": "string",
+            "description": "The exact command, script, cron entry, monitoring query, or configuration to implement this measure. Must be copy-paste ready."
+          }
+        },
+        "required": ["action", "command"]
+      },
+      "description": "Preventive measures to avoid recurrence. Each must include an 'action' and a 'command' with the exact monitoring query, alert config, cron job, or parameter change."
+    },
+    "additional_notes": {
+      "type": "string",
+      "description": "Any extra context, warnings, or related information"
+    },
+    "visual_aid_suggested": {
+      "type": "boolean",
+      "description": "Whether a visual diagram/infographic would help illustrate this problem"
+    },
+    "image_generation_prompt": {
+      "type": "string",
+      "description": "If visual_aid_suggested is true, provide a detailed, comprehensive prompt (200-400 words) for generating a technical infographic. Include specific details about diagram type, components, connections, colors, labels, and layout. Should be detailed enough for an AI image generator to create an accurate technical diagram."
+    }
+  },
+  "required": [
+    "title",
+    "error_summary",
+    "root_cause",
+    "severity",
+    "affected_systems",
+    "resolution_steps",
+    "preventive_measures",
+    "visual_aid_suggested"
+  ]
+}

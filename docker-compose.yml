@@ -1,0 +1,77 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: expert-frontend
+    restart: always
+    ports:
+      - "4100:3000"
+    environment:
+      - NODE_ENV=production
+      - INTERNAL_API_URL=http://expert-backend:8000
+      - API_KEY_FILE=/run/secrets/api_key
+    networks:
+      - internet
+      - intranet
+    depends_on:
+      - backend
+    secrets:
+      - api_key
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: expert-backend
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=expert
+      - POSTGRES_HOST=expert-db
+    networks:
+      - internet
+      - intranet
+    depends_on:
+      - db
+    secrets:
+      - gemini_api_key
+      - db_password
+      - api_key
+
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: expert-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_DB=expert
+    volumes:
+      - expert_db_data:/var/lib/postgresql
+    networks:
+      - dbnet
+      - intranet
+    secrets:
+      - db_password
+
+networks:
+  internet:
+    external: true
+  intranet:
+    external: true
+  dbnet:
+    external: true
+
+volumes:
+  expert_db_data:
+
+secrets:
+  gemini_api_key:
+    file: ./secrets/gemini_api_key.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  api_key:
+    file: ./secrets/api_key.txt

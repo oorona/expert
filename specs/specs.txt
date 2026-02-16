@@ -1,0 +1,601 @@
+Project Overview
+A secure, AI-driven diagnostic engine designed for high-pressure environments. It captures system errors (text/image), provides grounded resolutions, and maintains a versioned, searchable knowledge base.
+
+1. INFRASTRUCTURE & SECURITY
+
+    Networking (Docker):
+
+        internet Network: Public. Contains Frontend and Backend.
+
+        intranet Network: Private. Contains Frontend, Backend (FastAPI), and Database (Postgres).
+
+        dbnet Network: Database-only. Contains Database and Backend.
+
+        Logic: The Backend is on both internet (to reach the Gemini API) and intranet
+        (to reach the Database). The Database has no route to the internet.
+        The Frontend proxies all API calls through Next.js route handlers to the
+        Backend over intranet (env var INTERNAL_API_URL). Browser traffic never
+        reaches the Backend directly.
+
+    Secrets Management:
+
+        API keys and DB passwords must be handled via Docker Secrets (/run/secrets/).
+
+2. DATABASE & DATA MANAGEMENT (SOURCE OF TRUTH)
+
+Postgres is the master repository for retrieval, context, and versioning.
+
+    ORM & Schema Management:
+
+        SQLAlchemy 2.0 (async via asyncpg) is the ORM layer.
+
+        All table definitions live in models/database.py as SQLAlchemy declarative models.
+        These models are the single source of truth for the database schema.
+
+    Migration Strategy (Alembic):
+
+        Alembic manages all schema changes via versioned migration scripts under migrations/versions/.
+
+        On application startup the backend automatically:
+            1. Detects whether the database is a legacy (pre-Alembic) deployment and stamps it.
+            2. Runs `alembic upgrade head` to apply any pending migrations.
+
+        To create a new migration after changing a model:
+            alembic revision --autogenerate -m "description of change"
+
+        Migrations handle Postgres-specific features (extensions, BM25 indexes, HNSW indexes)
+        via raw SQL in op.execute() blocks, while standard tables use op.create_table().
+
+        Current migration chain:
+            0001 — Initial schema (extensions, tables, vector indexes, BM25 indexes)
+            0002 — Expert system (experts + expert_documents tables, file search store)
+            0003 — Add operation_name to expert_documents for upload polling
+            0004 — Add notes column to incidents (TEXT, non-nullable, default empty string)
+            0005 — Add BM25 index on notes column (idx_incidents_notes_bm25)
+            0006 — Add embedding_version to incidents for re-embedding tracking
+            0007 — Add related_incidents table for parent/follow-up article linking
+            0008 — Add status, source columns to incidents; create api_keys table;
+                    combined ingestion infrastructure
+            0009 — Update check_incident_status constraint to include analyzed and closed
+
+    Storage Fields:
+
+        raw_json: The original structured LLM output (JSONB, for programmatic retrieval).
+        Includes an LLM-generated "title" field — a concise, descriptive article title
+        (e.g. "How to Troubleshoot ORA-00001 Unique Constraint Violation") used throughout
+        the UI instead of raw error text.
+
+        markdown_content: A generated .md file for the Article Viewer and text search.
+
+        embedding: Vector representation of the error (via pgvector, Vector(768)).
+        Generated using the gemini-embedding-001 model with output_dimensionality=768
+        and task_type RETRIEVAL_DOCUMENT (queries use RETRIEVAL_QUERY).
+
+        notes: Free-text notes field (TEXT, non-nullable, defaults to empty string).
+        Editable from both the dashboard and article detail page with auto-save
+        (1.5 second debounce). Updated via PATCH /api/incidents/{id}.
+        Searchable via a dedicated BM25 index (idx_incidents_notes_bm25).
+
+        version_history: Tracks changes to prompts and documents for rollbacks.
+
+    Search Technology:
+
+        pg_textsearch: For keyword-based article search (BM25 ranking via <@> operator).
+        BM25 searches across three fields simultaneously using LEAST() to pick the
+        best score per incident: error_text, markdown_content, and notes.
+        Each field has its own BM25 index.
+        https://www.tigerdata.com/docs/use-timescale/latest/extensions/pg-textsearch
+
+        pgvector: For semantic similarity RAG (Retrieval-Augmented Generation).
+        https://www.tigerdata.com/docs/use-timescale/latest/extensions/pgvector
+
+        Hybrid Search: Reciprocal Rank Fusion (RRF) combining BM25 and vector
+        search results with equal 0.5/0.5 weighting. Frontend presents three
+        search modes via a segmented button group with tooltips:
+            - Keyword: BM25 full-text search
+            - Semantic: pgvector cosine similarity
+            - Hybrid: RRF fusion of both (default)
+
+    Sync Logic: Updates to Markdown articles in the UI must trigger an atomic update to the database and re-generate the vector embedding.
+
+    Session Management:
+
+        A FastAPI dependency (get_db) provides an AsyncSession per request.
+        The session auto-commits on success and rolls back on exception.
+
+3. EXPERT SYSTEM
+
+    Experts:
+        An Expert is a named entity (e.g. "Oracle Database", "Kubernetes") that groups:
+            - A set of prompts (system + user, for both grounded and file_search categories).
+            - A Gemini File Search store (one per expert) containing uploaded reference documents.
+            - An active/inactive toggle.
+
+        An expert MUST be selected before diagnosing. There is no default/global expert.
+        The diagnose endpoint requires expert_id (returns 422 if missing).
+        If the selected expert has no active prompts, the backend returns 400.
+
+    Expert Creation & LLM Prompt Generation:
+        When creating a new expert with a description, the system:
+            1. Loads the 4 global prompt templates (expert_id=NULL) as structural references.
+            2. Groups templates by category (grounded / file_search).
+            3. Calls gemini_service.generate_expert_prompts() ONCE PER CATEGORY
+               with the expert name, description, template content, and category.
+               - Grounded category: emphasis on model knowledge, web grounding,
+                 vendor best practices. No mention of file search.
+               - File_search category: emphasis on RAG data, uploaded internal docs
+                 as primary source, citing internal documentation.
+            4. The LLM rewrites both system and user prompts to be domain-specific
+               (e.g. mentioning relevant technologies, error patterns, terminology).
+            5. Falls back to copying global templates verbatim if LLM generation fails.
+            6. Creates 4 prompt records per expert with naming convention:
+               "{ExpertName} - {Type} ({category})"  e.g. "Oracle Database - System (grounded)".
+        The LLM uses gemini-3-pro-preview at temperature=0.7 with JSON structured output.
+        The {error_text} placeholder is preserved in generated user prompts.
+
+    Expert Creation SSE Progress:
+        POST /experts returns a StreamingResponse (text/event-stream) with progress events:
+            event: progress — {step, total, message} at each phase:
+                1. Creating file search store…
+                2. Creating expert record…
+                3. Generating grounded (model knowledge) prompts…
+                4. Generating file search (RAG) prompts…
+                5. Saving prompts…
+            event: done — final expert object payload
+        The frontend proxy streams SSE through to the client. The admin experts page
+        displays a progress bar with step counter, spinner, and current step message.
+        The "Create Expert" button shows "Creating…" while streaming.
+
+    Prompt Lifecycle & Source of Truth:
+        ⚠️  CRITICAL: The database is the SOLE source of truth for prompts and schemas.
+        Changes to files in data/prompts/ or data/schemas/ do NOT automatically update
+        the database. File-based templates are read ONLY on initial seed (first startup).
+
+        - Global templates (expert_id=NULL) are seeded on first startup from files:
+            data/prompts/system_diagnostic.md
+            data/prompts/user_template.md
+            data/prompts/system_file_search.md
+            data/prompts/user_file_search.md
+          After seeding, these exist only as base templates for new expert creation.
+          They are never used directly for diagnosis.
+
+        - Expert-specific prompts are created during expert creation (4 per expert)
+          via LLM prompt generation, using the global templates as structural references.
+
+        - Output schema is seeded from data/schemas/diagnostic_output.json on first startup,
+          then stored in the output_schemas table. All subsequent updates must be made
+          via the Schema Manager admin page or manual database updates.
+
+        - To update existing prompts/schemas after changing files, run:
+            docker exec expert-backend python update_prompts_and_schema.py
+          This script updates all existing prompts and the schema in the database.
+
+        - Deleting an expert CASCADE-deletes all its prompts (FK ondelete=CASCADE).
+        - All prompts remain editable via the Prompt Manager admin page after creation.
+
+    Expert Documents:
+        Documents uploaded per-expert are stored in Gemini's File Search API.
+        Each document is tracked in the expert_documents table with:
+            - file_name (display name), gemini_file_name (API reference), file_size,
+              status (uploading/pending/indexed/error), operation_name (for polling).
+
+        Upload & Indexing Pipeline:
+            1. POST /experts/{id}/documents accepts the file, creates a DB record
+               with status="uploading", and schedules a background task.
+            2. The background task uploads to Gemini, then polls the operation
+               every 5 seconds for up to 10 minutes (120 polls). On completion,
+               updates status to "indexed" or "error".
+            3. If polling times out, status is set to "error". The document may
+               still be indexing — the Sync button can recover it.
+
+        Upload Progress UI:
+            When documents are uploading/pending, a prominent blue banner appears
+            on the expert card (visible even when collapsed) showing:
+                - Spinner + "Indexing documents…" header
+                - Each pending file name with a live elapsed time counter
+                - "Polling every 5s — you'll be notified when complete"
+            The frontend auto-polls every 5 seconds via syncExpertDocument().
+            Toast notifications fire when a document transitions to "indexed"
+            (green success) or "error" (red error). When an upload finishes,
+            the File Store Documents list and expert counts auto-refresh.
+
+    Database Tables:
+        - experts: id, name (unique), description, file_search_store_name, is_active, timestamps.
+        - expert_documents: id, expert_id (FK CASCADE), file_name, gemini_file_name, file_size, status, created_at.
+        - prompts: expert_id FK now uses ON DELETE CASCADE (not SET NULL).
+
+4. BACKEND & LLM ORCHESTRATION
+
+    FastAPI Endpoints: Must support UI calls and direct Agent interaction (returning raw JSON).
+
+    Health Check: GET /health returns {"status": "ok"} for container orchestration readiness probes.
+
+    SSE Streaming Pattern:
+        Long-running endpoints (diagnose, expert creation) use Server-Sent Events
+        (SSE) via FastAPI's StreamingResponse with media_type="text/event-stream".
+        Events use named types:
+            event: progress — {step, total, message} for incremental UI updates
+            event: done     — final result payload
+            event: error    — error message (replaces HTTP error responses inside streams)
+        Next.js proxy routes detect text/event-stream content-type and forward the
+        stream directly to the client (no JSON parsing). Frontend API functions
+        accept an optional onProgress callback and parse SSE via ReadableStream.
+        Headers include Cache-Control: no-cache and X-Accel-Buffering: no.
+
+    Dependency Injection: All routers receive database sessions via FastAPI's Depends(get_db) pattern
+    instead of accessing a raw connection pool. Services receive the session as a parameter.
+
+    Model Parameters: API must allow the UI to pass Model Selection, Thinking Level, and Temperature.
+
+    Thinking Mode Configuration:
+        Gemini models support extended reasoning ("thinking") with different configuration approaches:
+
+        Gemini 3 models (gemini-3-flash-preview, gemini-3-pro-preview):
+            - Use thinking_level parameter with qualitative settings
+            - Gemini 3 Flash supports: minimal, low, medium, high (default: high)
+            - Gemini 3 Pro supports: low, high (default: high)
+            - Gemini 3 Pro CANNOT use minimal or medium levels
+            - Gemini 3 Pro cannot disable thinking entirely
+
+        Gemini 2.5 models (gemini-2.5-flash, gemini-2.5-pro, etc.):
+            - Use thinking_budget parameter with numeric token counts
+            - Budget ranges: 0-24576 tokens depending on model variant
+            - Low: 1024 tokens, Medium: 8192 tokens, High: 24576 tokens
+
+        Thinking works with ALL Gemini tools and capabilities including:
+            - Grounding with Google Search
+            - File Search (RAG)
+            - Code Execution
+            - URL Context
+            - Function Calling
+            - Structured Outputs (response_json_schema)
+
+        The include_thoughts flag controls whether thought summaries are streamed back.
+        Frontend displays thought summaries in real-time during long-running diagnoses.
+
+        Reference: https://ai.google.dev/gemini-api/docs/thinking
+
+    Supported Models (with costs per 1M tokens):
+        - gemini-2.5-flash-lite-preview-06-17: $0.10 input / $0.40 output (file search + grounding)
+        - gemini-2.5-flash:                    $0.15 input / $3.50 output (grounding only, NO file search)
+        - gemini-2.5-pro:                      $1.25 input / $10.00 output (file search + grounding)
+        - gemini-3-flash-preview:              $0.50 input / $3.00 output (file search + grounding)
+        - gemini-3-pro-preview:                $2.00 input / $12.00 output (file search + grounding)
+
+    Image Understanding: Ability to process screenshots of errors directly.
+    https://ai.google.dev/gemini-api/docs/image-understanding
+
+    Search Modes (MUTUALLY EXCLUSIVE — cannot be combined in a single call):
+
+        Grounding: Live search for latest fixes. https://ai.google.dev/gemini-api/docs/google-search
+
+        File Search: RAG using uploaded documentation in per-expert stores.
+        https://ai.google.dev/gemini-api/docs/file-search
+
+        File Search Citations: When file search is used, the system extracts detailed
+        citation data from the Gemini response:
+            - grounding_supports: segment text with confidence scores
+            - rag_chunk: document chunk text with page_span (first_page / last_page)
+        These are stored in file_search_results (JSONB) and rendered as citation
+        cards showing document title, page range, chunk excerpt, and inline
+        confidence percentages.
+
+    Diagnosis SSE Progress:
+        POST /diagnose returns a StreamingResponse (text/event-stream) with progress events:
+            event: progress — {step, total, message} at each phase:
+                1. Checking for similar incidents… (embedding + pgvector query)
+                2. Loading prompts & schema…
+                3. Analyzing with Gemini… (the slow LLM call)
+                4. Generating report… (markdown conversion)
+                5. Saving results… (DB persist)
+            event: done — final result payload (same shape as the old JSON response)
+            event: error — error message for validation/prompt failures
+        Duplicate detection (≥90% similarity, force=false) returns early via a done
+        event containing only {duplicate_of: ...} without calling the LLM.
+        Input validation (model, temperature, thinking_level, image, text length) is
+        performed eagerly before the stream starts, returning normal HTTP errors.
+        The frontend displays a blue progress banner below the error input with:
+            - Spinner + "Step X of 5: message"
+            - Progress bar filling as steps complete
+            - Elapsed time counter (e.g. "23s", "1m 12s")
+
+    Structured Outputs with Grounding:
+        Gemini 3 models support combining structured outputs (response_json_schema) with
+        all built-in tools including Grounding with Google Search, URL Context, Code
+        Execution, File Search, and Function Calling.
+
+        The system uses a single API call with both:
+            - tools: [{"google_search": {}}] for grounding
+            - response_mime_type: "application/json"
+            - response_json_schema: diagnostic output schema
+
+        Reference: https://ai.google.dev/gemini-api/docs/structured-output
+
+    Prompt Categories:
+        Each prompt has a prompt_category field: "grounded" or "file_search".
+        Different prompts are used depending on which search mode is active:
+            - Grounded mode: uses system/user prompts with category "grounded".
+            - File Search mode: uses system/user prompts with category "file_search".
+        Prompts are always expert-specific (expert_id=FK). Global templates (expert_id=NULL)
+        exist only as seed templates for generating new expert prompts.
+        During expert creation, prompts are generated per category with different LLM
+        emphasis (see Expert Creation & LLM Prompt Generation above).
+
+    Global Prompt Templates (Seed Data):
+        Four global templates are seeded on first startup (expert_id=NULL):
+            - Template - System (grounded)     — from data/prompts/system_diagnostic.md
+            - Template - User (grounded)       — from data/prompts/user_template.md
+            - Template - System (file_search)  — from data/prompts/system_file_search.md
+            - Template - User (file_search)    — from data/prompts/user_file_search.md
+        These are never used directly for diagnosis — they serve only as structural
+        references for LLM prompt generation when creating new experts.
+
+    Token & Cost Control:
+        Must log total, session, and per-call tokens. https://ai.google.dev/gemini-api/docs/tokens?lang=python
+
+        Token Cost Footer: A fixed-position collapsible panel at the bottom-right of the
+        dashboard displays:
+            - Last Call: input/output token counts + USD cost
+            - Session Total: accumulated input/output tokens + total USD cost
+        Cost is calculated per model using the MODELS pricing table (per 1M tokens).
+        Chat follow-up token usage is accumulated into the session total in real-time
+        via an onTokenUsage callback from the ChatArea component.
+
+        Context Caching: Infrastructure exists (create_cache method) but is not yet
+        actively invoked. Should be integrated for heavy documentation contexts to
+        reduce costs. https://ai.google.dev/gemini-api/docs/caching
+
+5. UI & FRONTEND FUNCTIONALITY
+
+    Theme Support:
+        Light / Dark / System (auto-detect) modes.
+        Cycle button in the header. Preference persisted in localStorage.
+        All components support dark: Tailwind variants via class-based toggle on <html>.
+
+    InlineConfirm Component:
+        A reusable inline confirmation bar used across the application to replace
+        native browser confirm() dialogs. Features:
+            - Message + Confirm/Cancel buttons with customizable labels
+            - Auto-cancel countdown (default 8 seconds) with animated progress bar
+            - Three visual variants: danger (red), warning (amber), neutral (gray)
+            - Async-aware confirm handler with loading state
+        Used by: ExpertEditor (delete expert, delete doc, delete store doc),
+        Sidebar (Clear All), ArticleList (delete article), Article detail (delete),
+        API Keys admin (delete key).
+
+    Main Dashboard:
+
+        Layout: max-w-7xl centered container.
+
+        Tabbed Interface: Two top-level tabs — "Dashboard" and "Incoming".
+            - Dashboard tab: The main diagnosis interface (input, results, chat).
+            - Incoming tab: Lists API-ingested errors for review. Shows count badge.
+              Displays status badges (New/In Review/Analyzed), source_system,
+              client_name, and error_summary. Polls every 30 seconds.
+              Clicking an error opens review mode (if not yet analyzed) or navigates
+              to the existing session (if analyzed). Close button on analyzed items
+              transitions status to "closed".
+
+        Input: Error text box and image upload. Contained within a collapsible section
+        that auto-collapses after diagnosis, showing a summary strip with the
+        LLM-generated title (or error_summary fallback) and a "✓ Saved" indicator.
+
+        Expert Selector: Dropdown of active experts (with document count). Required —
+        no "None" or default option. Shows a red border and "Required" hint when unselected.
+        The first active expert is auto-selected on page load.
+        Submit button is disabled and shows "Select an Expert to Diagnose" when no expert is selected.
+        Required for both Grounding and File Search modes.
+
+        Controls: Selectors for Model (with cost display), Thinking Level, and Temperature.
+        Collapsed by default to reduce visual clutter; expandable via click.
+
+        Grounding / File Search: Mutually exclusive checkboxes. File Search disabled when:
+            - No expert selected, or
+            - Selected model does not support file search (e.g. gemini-2.5-flash).
+        Duplicate Detection: Before calling the LLM, the system checks for near-duplicates
+        (≥90% cosine similarity). If found and force=false, the UI shows a card with:
+            - Match percentage and existing article title
+            - "View existing article" button to navigate to the prior session
+            - "Create new article anyway" button to force a new diagnosis
+        The LLM call is skipped entirely unless the user forces creation.
+
+        Similar Incidents Banner: Collapsible amber banner shown before LLM results.
+        Displays count of similar past diagnoses with similarity percentage per match
+        and a "View" button to navigate to the prior session. Powered by pgvector
+        cosine similarity with a configurable threshold (default 85%).
+        Only matches incidents with non-empty markdown_content. Excludes the current
+        incident_id when in review mode to avoid self-matching.
+
+        Status Bar: Displayed above the main content when viewing an existing session.
+        Shows current incident status with colored dot indicator:
+            - Green: resolved/closed
+            - Purple: analyzed
+            - Yellow: in_review/pending_review/created
+        Includes action buttons: "Close Incident" (when analyzed) and "Mark as Resolved".
+
+        Dual-Tab Response: If File Search is used, the UI must show two separate result tabs: "General/Grounded" and "Document Specific."
+
+    Diagnostic Output Schema:
+        The LLM output is constrained to a JSON schema (diagnostic_output.json) with these fields:
+            - title (required): LLM-generated article title, KB-style heading
+            - error_summary (required): concise one-line summary
+            - severity (required): enum — critical, high, medium, low
+            - root_cause (required): detailed root cause explanation
+            - affected_systems (required): array of affected components
+            - resolution_steps (required): ordered resolution steps
+            - preventive_measures (required): steps to prevent recurrence
+            - additional_notes (optional): extra context or warnings
+            - visual_aid_suggested (required): boolean indicating if an infographic would help
+            - image_generation_prompt (optional): detailed prompt for generating technical diagram
+
+        The title field is metadata — it is excluded from the DynamicJsonRenderer sections
+        and from the markdown conversion. It is used as the display name in the sidebar,
+        KB list, article detail heading, and similar incidents banner.
+
+    Infographic Generation:
+        The LLM analyzes each error and determines if a visual aid (diagram/infographic)
+        would help illustrate the problem. System prompts instruct the LLM to consider:
+            - System architecture or data flow
+            - Error propagation through components
+            - Before/after configuration comparisons
+            - Complex troubleshooting decision trees
+            - Memory/resource allocation patterns
+
+        When visual_aid_suggested=true, the LLM generates a comprehensive, detailed
+        image_generation_prompt (200-400 words) describing the diagram with:
+            - Type (architecture diagram, flowchart, comparison chart, etc.)
+            - Components, connections, and labels
+            - Visual language (colors, shapes, arrows, layout)
+            - Focus on clarity and educational value
+
+        The frontend displays an InfographicGenerator component showing:
+            - Suggested prompt with edit capability
+            - "Generate Infographic" button
+            - Loading state during generation
+            - Inline image display with download button
+
+        Image generation uses Gemini Imagen 3.0 (imagen-3.0-generate-001) via:
+            POST /api/generate-infographic
+            Payload: { prompt: string, aspect_ratio: "16:9" }
+            Response: { image_data: base64-encoded PNG, prompt_used: string }
+
+        Technical prompts are enhanced with style guidelines for professional technical
+        documentation (clean design, clear labels, readable text, professional color scheme).
+        https://ai.google.dev/gemini-api/docs/image-generation
+
+    Reactive & Dynamic Rendering:
+        The DynamicJsonRenderer iterates raw_json keys with a priority ordering
+        (error_summary → severity → root_cause → affected_systems → resolution_steps →
+        preventive_measures → additional_notes). Extra keys not in the priority list
+        render automatically after the priority keys. Metadata keys (title) are excluded.
+        Each section has a mapped icon and renders arrays as numbered/bulleted lists,
+        severity as a colored badge, and strings as prose.
+
+    Knowledge Base & History:
+
+        Session Sidebar: A list of all past diagnoses. Displays the LLM-generated title
+        (falling back to error_text or "Image diagnosis"). Clicking an item reloads the
+        full state: JSON, tabs, and chat history. The sidebar auto-refreshes via a custom
+        "sessions-changed" event dispatched after new diagnoses and deletions.
+
+        Article Viewer: Search and view Markdown documents with full formatting. The
+        article detail page shows the LLM-generated title as the heading, with the
+        original question/error text displayed below it in a muted styled block.
+        Includes document citations, notes (auto-save), and delete functionality.
+
+    Multi-Chat Area: Follow-up chat interface. The original response is fixed unless an update is requested; updates trigger a "Diff View" (Red/Green) to confirm changes.
+    Chat follow-up token usage is reported to the parent dashboard via an onTokenUsage
+    callback and accumulated into the session total.
+
+    Admin Pages:
+
+        Expert Manager: Create/edit/delete experts. Upload/remove documents to expert file search stores.
+        Documents display status (uploading/pending/indexed/error) and file size.
+        Upload progress banner with elapsed time and auto-polling (see Expert Documents above).
+        On creation, a description field guides the AI to generate domain-specific prompts.
+        SSE progress bar with step counter during creation (see Expert Creation SSE above).
+        Deleting an expert removes all associated prompts (cascade).
+        All delete actions use the InlineConfirm component instead of browser confirm().
+
+        Prompt Manager: Editable System Prompt (behavior) and User Prompt templates.
+        Filters for expert (All / Global / specific expert) and category (grounded / file_search).
+        Create prompts requires selecting an expert (no global/unassigned option in create form).
+        Global templates are viewable via the filter but exist only as seed templates.
+        https://ai.google.dev/gemini-api/docs/prompting-strategies
+
+        Schema Manager: Edit the Structured Output JSON with built-in validation.
+        https://ai.google.dev/gemini-api/docs/structured-output?example=recipe
+
+6. ERROR INGESTION API (External Integration)
+
+    Purpose: External systems (CI pipelines, monitoring agents, scripts) can submit errors
+    programmatically via an HTTP API. Submitted errors appear in the Incoming Errors sidebar
+    for operator review and diagnosis.
+
+    API Versioning: All ingestion endpoints are under /api/v1/ingest/.
+
+    Authentication: Uses X-Client-Key header with SHA-256 hashed keys validated against
+    the api_keys table. Separate from the internal X-API-Key used by the frontend.
+
+    Endpoints:
+        GET  /api/v1/ingest/experts  — List active experts with system_prompt for each.
+        POST /api/v1/ingest          — Submit a single error (expert_id required).
+        POST /api/v1/ingest/batch    — Submit up to 100 errors in one request.
+
+    Required Fields: error_text (string, max 50k chars), expert_id (int, must reference
+    an active expert — validated server-side, 422 if invalid/inactive).
+
+    Optional Fields: source_system (string), metadata (object).
+
+    Rate Limits: 60/min for single, 10/min for batch.
+
+    Incident Status Workflow:
+        Valid statuses: created, pending_review, in_review, analyzed, closed, resolved.
+        Transitions:
+            API-ingested:  created → in_review → analyzed → closed
+            Manual:        resolved (set immediately on creation)
+            Review mode:   in_review (on open) → analyzed (after diagnosis)
+        Status management endpoints:
+            PATCH /incidents/{id}/status — update status to any valid value
+        Incident filtering:
+            - Main sidebar (list_incidents): excludes API-ingested incidents unless
+              their status is "analyzed" or "closed". This prevents unreviewed
+              incoming errors from cluttering the knowledge base.
+            - Incoming list (list_incoming_errors): shows created, in_review, and
+              analyzed items (not closed — those are considered fully processed).
+
+    Article Linking:
+        POST /incidents/link — creates bidirectional links between two incidents.
+        Accepts session_id_a, session_id_b, and relation_type (related | followup | parent | duplicate).
+        The diagnose endpoint auto-links parent/follow-up when parent_session_id is provided.
+        GET /incidents/{id} response includes related_articles array with relation_type per link.
+
+    Incoming Errors Tab: Located in the main dashboard as a tab (not sidebar).
+    Polls backend every 30 seconds for API-ingested errors. Shows count badge on tab.
+    Displays status badges (New/In Review/Analyzed), source system, and error summary.
+    Clicking an error opens Review Mode or navigates to existing session if already analyzed.
+    Close button on analyzed items transitions to "closed" status.
+
+    Review Mode: Pre-fills the error text and pre-selects the expert specified during
+    ingestion (read from raw_json.expert_id). Amber banner indicates review mode.
+    The incident_id is sent to the diagnose endpoint so it updates the existing
+    incident (status → analyzed) instead of creating a new one.
+
+    Bulk Delete: DELETE /api/incidents (no id) deletes all incidents and runs VACUUM FULL.
+    "Clear All" button in sidebar uses InlineConfirm instead of browser confirm().
+
+    API Key Management: Admin page under /admin/api-keys for CRUD operations on client keys.
+    Keys are shown only once at creation (SHA-256 hash stored, plaintext never persisted).
+
+    Database Tables:
+        - api_keys: id, name, description, key_hash (unique), is_active, timestamps.
+        - incidents: source column ("manual" or "api"), status column for workflow tracking.
+          Status CHECK constraint: IN ('created', 'pending_review', 'in_review',
+          'analyzed', 'closed', 'resolved').
+        - related_incidents: incident_id (FK), related_id (FK), relation_type
+          (related/followup/parent/duplicate), unique constraint on (incident_id, related_id).
+
+7. VERSIONING & LOGIC
+
+    Document Sync: Editing a Markdown article updates the database "Source of Truth" and the vector search index simultaneously.
+
+    Automated Suggestion: Before a new LLM call, the system queries pgvector. If a similar incident exists, it offers the previous document to the user first.
+
+8. TECH STACK
+
+    Frontend: Next.js (TypeScript), Tailwind CSS v4, deployed on port 4100.
+
+    Backend: FastAPI (Python 3.11), uvicorn.
+
+    Database: PostgreSQL 18 (pgvector/pgvector:pg18 image) with extensions:
+        - pgvector  (vector similarity search)
+        - pg_textsearch v0.5.1 (BM25 full-text search, compiled from source)
+
+    ORM: SQLAlchemy 2.0 (async, declarative mapped_column style).
+
+    Migrations: Alembic (async env.py with asyncpg driver).
+
+    LLM: Google Gemini (via google-genai SDK).
+    Embedding Model: gemini-embedding-001 (768 dimensions).
+
+    Container Orchestration: Docker Compose with three networks (internet, intranet, dbnet).
