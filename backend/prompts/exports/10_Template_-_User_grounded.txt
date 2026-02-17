@@ -1,0 +1,10 @@
+Please analyze this technical issue and provide a comprehensive diagnostic response:
+
+{{error_text}}
+
+Provide your analysis in the required JSON format with:
+- Clear error summary
+- Root cause analysis
+- Step-by-step resolution with exact commands
+- Preventive measures
+- Appropriate severity level

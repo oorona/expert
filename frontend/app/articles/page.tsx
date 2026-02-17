@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { deleteSession, listSessions, searchContent, listExperts } from "@/lib/api";
 import { ArticleSearch } from "@/components/articles/ArticleSearch";
 import { ArticleList } from "@/components/articles/ArticleList";
+import { CategoryFilter } from "@/components/articles/CategoryFilter";
 import type { SessionListItem, SearchResult, ExpertItem } from "@/types";
 
 export default function ArticlesPage() {
@@ -12,6 +13,7 @@ export default function ArticlesPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [experts, setExperts] = useState<ExpertItem[]>([]);
   const [selectedExpertId, setSelectedExpertId] = useState<number | null | "none">(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,19 +22,25 @@ export default function ArticlesPage() {
   }, []);
 
   useEffect(() => {
-    // Filter sessions when expert filter changes
-    if (selectedExpertId === null) {
-      setFilteredSessions(sessions);
-    } else if (selectedExpertId === "none") {
-      setFilteredSessions(
-        sessions.filter((s) => !s.expert_id)
-      );
-    } else {
-      setFilteredSessions(
-        sessions.filter((s) => s.expert_id === selectedExpertId)
+    // Filter sessions when expert or category filter changes
+    let filtered = sessions;
+
+    // Expert filter
+    if (selectedExpertId === "none") {
+      filtered = filtered.filter((s) => !s.expert_id);
+    } else if (selectedExpertId !== null) {
+      filtered = filtered.filter((s) => s.expert_id === selectedExpertId);
+    }
+
+    // Category filter
+    if (selectedCategory) {
+      filtered = filtered.filter((s) =>
+        s.categories?.some((c) => c.category === selectedCategory)
       );
     }
-  }, [sessions, selectedExpertId]);
+
+    setFilteredSessions(filtered);
+  }, [sessions, selectedExpertId, selectedCategory]);
 
   async function loadSessions() {
     setSearchResults(null);
@@ -88,7 +96,7 @@ export default function ArticlesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold dark:text-gray-100">Knowledge Base</h2>
         <span className="text-xs text-gray-400 dark:text-gray-500">
@@ -96,33 +104,41 @@ export default function ArticlesPage() {
         </span>
       </div>
 
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-4 items-center flex-wrap">
         <ArticleSearch onSearch={handleSearch} onClear={handleClear} />
-        {!searchResults && experts.length > 0 && (
-          <div className="flex items-center gap-2">
-            <label htmlFor="expert-filter" className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Filter by Expert:
-            </label>
-            <select
-              id="expert-filter"
-              value={selectedExpertId ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedExpertId(
-                  val === "" ? null : val === "none" ? "none" : Number(val)
-                );
-              }}
-              className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Experts</option>
-              <option value="none">No Expert Assigned</option>
-              {experts.map((expert) => (
-                <option key={expert.id} value={expert.id}>
-                  {expert.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {!searchResults && (
+          <>
+            {experts.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="expert-filter" className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                  Expert:
+                </label>
+                <select
+                  id="expert-filter"
+                  value={selectedExpertId ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedExpertId(
+                      val === "" ? null : val === "none" ? "none" : Number(val)
+                    );
+                  }}
+                  className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Experts</option>
+                  <option value="none">No Expert Assigned</option>
+                  {experts.map((expert) => (
+                    <option key={expert.id} value={expert.id}>
+                      {expert.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <CategoryFilter
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+            />
+          </>
         )}
       </div>
 
@@ -156,6 +172,7 @@ export default function ArticlesPage() {
             error_summary: s.error_summary,
             status: s.status,
             expert_id: s.expert_id,
+            categories: s.categories,
             created_at: s.created_at,
           }))}
         />

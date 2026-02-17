@@ -422,7 +422,7 @@ function Dashboard() {
   const sessionCost = calcCost(sessionUsage, costModel);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       {/* Tab Bar */}
       <div className="flex border-b border-gray-200 dark:border-gray-700">
         <button
@@ -647,20 +647,13 @@ function Dashboard() {
             </div>
             <span className="text-gray-400 dark:text-gray-500 text-xs">{inputOpen ? "▼" : "▶"}</span>
           </button>
-          {result && (
-            <button
-              onClick={handleNewDiagnosis}
-              className="mr-3 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md transition-colors"
-            >
-              + New
-            </button>
-          )}
         </div>
         {inputOpen && (
           <div className="px-4 pb-4">
             <ErrorInput
               key={inputResetKey}
               onSubmit={handleDiagnose}
+              onNew={result ? handleNewDiagnosis : undefined}
               loading={loading}
               model={model}
               temperature={temperature}

@@ -1,6 +1,8 @@
 import type {
   ApiKeyItem,
+  Category,
   ChatMessage,
+  ClassificationResult,
   DiagnosisResponse,
   DocumentItem,
   ExpertDocument,
@@ -312,6 +314,23 @@ export async function updateSchema(
   });
 }
 
+export async function getSchemaCategoryMappings(
+  schemaId: number
+): Promise<Array<{ category_name: string; priority: number }>> {
+  return fetchJSON(`${API_BASE}/admin/schemas/${schemaId}/categories`);
+}
+
+export async function updateSchemaCategoryMappings(
+  schemaId: number,
+  categories: Array<{ category_name: string; priority: number }>
+): Promise<Array<{ category_name: string; priority: number }>> {
+  return fetchJSON(`${API_BASE}/admin/schemas/${schemaId}/categories`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ categories }),
+  });
+}
+
 // --- Experts ---
 
 export async function listExperts(): Promise<ExpertItem[]> {
@@ -583,4 +602,21 @@ export async function updateApiKey(
 
 export async function deleteApiKey(id: number): Promise<void> {
   await fetch(`${API_BASE}/admin/api-keys/${id}`, { method: "DELETE" });
+}
+
+// --- Categories & Classification ---
+
+export async function listCategories(): Promise<Category[]> {
+  return fetchJSON(`${API_BASE}/admin/categories`);
+}
+
+export async function classifyInput(
+  userInput: string,
+  model: string = "gemini-2.5-flash"
+): Promise<ClassificationResult> {
+  return fetchJSON(`${API_BASE}/classify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_input: userInput, model }),
+  });
 }

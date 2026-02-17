@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from db.session import async_session, engine
 from db.init import seed_defaults
-from routers import admin, chat, diagnose, documents, experts, images, incidents, ingest, search
+from routers import admin, chat, classify, diagnose, documents, experts, images, incidents, ingest, search
 from services.gemini import gemini_service
 from services.similarity import normalize_error_text
 
@@ -205,6 +205,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"error": "Internal server error"},
     )
 
+app.include_router(classify.router, prefix="/api")
 app.include_router(diagnose.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 app.include_router(images.router, prefix="/api")

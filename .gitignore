@@ -1,1 +1,40 @@
+# Secrets and credentials
 /secrets
+*.key
+*.pem
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IMPORTANT: Do NOT ignore backups - these are critical for disaster recovery!
+# /backend/backups/  ← DO NOT ADD THIS LINE
+# /backend/prompts/exports/  ← DO NOT ADD THIS LINE
+# /backend/schemas/definitions/  ← DO NOT ADD THIS LINE

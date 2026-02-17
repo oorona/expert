@@ -58,7 +58,6 @@ async def list_experts(db: AsyncSession = Depends(get_db)):
     )
     rows = result.all()
 
-    # Fetch store document counts from Gemini in parallel
     async def _store_count(store_name: str | None) -> int:
         if not store_name:
             return 0
@@ -215,8 +214,6 @@ async def create_expert(body: ExpertCreate, db: AsyncSession = Depends(get_db)):
             )
 
         await db.commit()
-
-        # Final event: send the created expert data
         yield sse("done", _expert_to_dict(expert, 0))
 
     return StreamingResponse(
@@ -294,15 +291,16 @@ async def regenerate_prompts(expert_id: int, db: AsyncSession = Depends(get_db))
                 templates_by_cat[cat] = {}
             templates_by_cat[cat][gp.prompt_type] = gp.content
 
-        total_steps = len(templates_by_cat) + 1  # one per category + save step
+        total_steps = len(global_list)  # one per individual prompt
         step = 0
         category_labels = {"grounded": "grounded (model knowledge)", "file_search": "file search (RAG)"}
         generated: dict[str, dict[str, str]] = {}
 
         for cat, tpls in templates_by_cat.items():
-            step += 1
             label = category_labels.get(cat, cat)
-            yield sse("progress", {"step": step, "total": total_steps, "message": f"Generating {label} prompts…"})
+            for ptype in sorted(tpls.keys()):  # system, then user
+                step += 1
+                yield sse("progress", {"step": step, "total": total_steps, "message": f"Generating {ptype} prompt ({label})…"})
             sys_tpl = tpls.get("system", "")
             usr_tpl = tpls.get("user", "")
             if not sys_tpl:
@@ -326,10 +324,7 @@ async def regenerate_prompts(expert_id: int, db: AsyncSession = Depends(get_db))
                     expert.name, cat, exc,
                 )
 
-        # Save step: delete old expert prompts and insert new ones
-        step = total_steps
-        yield sse("progress", {"step": step, "total": total_steps, "message": "Saving prompts…"})
-
+        # Save: delete old expert prompts and insert new ones
         await db.execute(delete(Prompt).where(Prompt.expert_id == expert_id))
 
         for gp in global_list:
@@ -373,7 +368,6 @@ async def delete_expert(expert_id: int, db: AsyncSession = Depends(get_db)):
         except Exception as exc:
             logger.warning("Could not delete file search store: %s", exc)
 
-    # Delete expert prompts first, then the expert itself
     await db.execute(delete(Prompt).where(Prompt.expert_id == expert_id))
     await db.execute(delete(Expert).where(Expert.id == expert_id))
     return {"status": "deleted"}
@@ -444,7 +438,6 @@ async def delete_store_document(
         logger.warning("Could not delete from store: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to delete document from store")
 
-    # Remove matching DB record if any
     doc_result = await db.execute(
         select(ExpertDocument).where(
             ExpertDocument.expert_id == expert_id,
@@ -620,7 +613,6 @@ async def upload_expert_document(
     await db.refresh(doc)
     doc_dict = doc.to_dict()
 
-    # Schedule the entire upload + poll in the background
     background_tasks.add_task(
         _background_upload_and_poll,
         doc.id,
@@ -647,7 +639,6 @@ async def sync_document_status(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # If we have an operation name and status is still uploading, poll it
     if doc.operation_name and doc.status in ("uploading", "pending"):
         try:
             op_result = await gemini_service.poll_upload_operation(
@@ -664,7 +655,6 @@ async def sync_document_status(
         except Exception as exc:
             logger.warning("Could not poll operation: %s", exc)
 
-    # If we have a gemini file name, check its state in the store
     elif doc.gemini_file_name:
         try:
             store_doc = await gemini_service.get_store_document(

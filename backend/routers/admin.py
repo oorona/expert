@@ -1,7 +1,9 @@
 import hashlib
 import json
+import logging
 import secrets as secrets_mod
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -9,7 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_db
-from models.database import ApiKey, OutputSchema, Prompt, VersionHistory
+from models.database import ApiKey, Category, OutputSchema, Prompt, Schema, SchemaCategory, VersionHistory
 from models.schemas import (
     PromptCreate,
     PromptUpdate,
@@ -18,7 +20,51 @@ from models.schemas import (
 )
 from security import require_api_key
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+SCHEMAS_DIR = Path(__file__).parent.parent / "schemas" / "definitions"
+
+
+async def _auto_export_schemas(db: AsyncSession) -> None:
+    """Write all schemas + category mappings to disk after any schema change."""
+    try:
+        SCHEMAS_DIR.mkdir(parents=True, exist_ok=True)
+
+        schemas_res = await db.execute(select(Schema).order_by(Schema.id))
+        schemas = schemas_res.scalars().all()
+
+        mappings_res = await db.execute(
+            select(SchemaCategory).order_by(SchemaCategory.schema_id, SchemaCategory.category_name)
+        )
+        mappings = mappings_res.scalars().all()
+
+        schema_cats: dict[int, list] = {}
+        for m in mappings:
+            schema_cats.setdefault(m.schema_id, []).append(
+                {"category_name": m.category_name, "priority": m.priority}
+            )
+
+        manifest = []
+        for s in schemas:
+            cats = schema_cats.get(s.id, [])
+            entry = {
+                "name": s.name,
+                "description": s.description,
+                "json_schema": s.json_schema,
+                "is_active": s.is_active,
+                "categories": cats,
+            }
+            manifest.append(entry)
+            safe_name = s.name.lower().replace(" ", "_")
+            (SCHEMAS_DIR / f"{safe_name}.json").write_text(
+                json.dumps({"schema": s.json_schema, "categories": cats}, indent=2)
+            )
+
+        (SCHEMAS_DIR / "schemas_manifest.json").write_text(json.dumps(manifest, indent=2))
+        logger.info("Auto-exported %d schemas to %s", len(schemas), SCHEMAS_DIR)
+    except Exception as exc:
+        logger.warning("Auto-export schemas failed: %s", exc)
 
 
 # --- Prompts ---
@@ -34,9 +80,6 @@ async def list_prompts(
 
     if expert_id is not None:
         query = query.where(Prompt.expert_id == expert_id)
-    elif expert_id is None and category is None:
-        # Default: show global prompts (no expert)
-        pass
 
     if category is not None:
         query = query.where(Prompt.prompt_category == category)
@@ -109,16 +152,18 @@ async def delete_prompt(prompt_id: int, db: AsyncSession = Depends(get_db)):
 # --- Output Schemas ---
 
 
-@router.get("/schemas", dependencies=[Depends(require_api_key)])
+@router.get("/schemas")
 async def list_schemas(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(OutputSchema).order_by(OutputSchema.name))
+    """List all category-based schemas (public endpoint - no auth required)."""
+    result = await db.execute(select(Schema).order_by(Schema.name))
     return [s.to_dict() for s in result.scalars().all()]
 
 
-@router.get("/schemas/{schema_id}", dependencies=[Depends(require_api_key)])
+@router.get("/schemas/{schema_id}")
 async def get_schema(schema_id: int, db: AsyncSession = Depends(get_db)):
+    """Get a specific schema by ID (public endpoint - no auth required)."""
     result = await db.execute(
-        select(OutputSchema).where(OutputSchema.id == schema_id)
+        select(Schema).where(Schema.id == schema_id)
     )
     schema = result.scalar_one_or_none()
     if not schema:
@@ -126,29 +171,36 @@ async def get_schema(schema_id: int, db: AsyncSession = Depends(get_db)):
     return schema.to_dict()
 
 
-@router.post("/schemas", dependencies=[Depends(require_api_key)])
+@router.post("/schemas")
 async def create_schema(body: SchemaCreate, db: AsyncSession = Depends(get_db)):
-    schema = OutputSchema(name=body.name, schema_json=body.schema_json)
+    """Create a new category-based schema (public endpoint - no auth required)."""
+    schema = Schema(
+        name=body.name,
+        description=getattr(body, 'description', ''),
+        json_schema=body.schema_json
+    )
     db.add(schema)
-    await db.flush()
+    await db.commit()
     await db.refresh(schema)
+    await _auto_export_schemas(db)
     return schema.to_dict()
 
 
-@router.put("/schemas/{schema_id}", dependencies=[Depends(require_api_key)])
+@router.put("/schemas/{schema_id}")
 async def update_schema(
     schema_id: int, body: SchemaUpdate, db: AsyncSession = Depends(get_db)
 ):
+    """Update an existing schema (public endpoint - no auth required)."""
     result = await db.execute(
-        select(OutputSchema).where(OutputSchema.id == schema_id)
+        select(Schema).where(Schema.id == schema_id)
     )
     schema = result.scalar_one_or_none()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema not found")
 
     if body.schema_json is not None:
-        old_json = json.dumps(schema.schema_json)
-        schema.schema_json = body.schema_json
+        old_json = json.dumps(schema.json_schema)
+        schema.json_schema = body.schema_json
         schema.updated_at = datetime.now(timezone.utc)
         db.add(
             VersionHistory(
@@ -163,15 +215,129 @@ async def update_schema(
         schema.is_active = body.is_active
         schema.updated_at = datetime.now(timezone.utc)
 
-    await db.flush()
+    if hasattr(body, 'description') and body.description is not None:
+        schema.description = body.description
+        schema.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
     await db.refresh(schema)
+    await _auto_export_schemas(db)
     return schema.to_dict()
 
 
 @router.delete("/schemas/{schema_id}", dependencies=[Depends(require_api_key)])
 async def delete_schema(schema_id: int, db: AsyncSession = Depends(get_db)):
-    await db.execute(delete(OutputSchema).where(OutputSchema.id == schema_id))
+    """Delete a schema by ID."""
+    await db.execute(delete(Schema).where(Schema.id == schema_id))
+    await db.commit()
     return {"status": "deleted"}
+
+
+# --- Categories ---
+
+@router.get("/categories")
+async def list_categories(db: AsyncSession = Depends(get_db)):
+    """List all categories (public endpoint - no auth required)."""
+    result = await db.execute(select(Category).order_by(Category.display_name))
+    categories = result.scalars().all()
+    return [
+        {
+            "name": c.name,
+            "display_name": c.display_name,
+            "description": c.description,
+            "intent_description": c.intent_description,
+            "example_inputs": c.example_inputs,
+            "key_outputs": c.key_outputs,
+        }
+        for c in categories
+    ]
+
+
+# --- Schema-Category Mappings ---
+
+@router.get("/schemas/{schema_id}/categories")
+async def get_schema_categories(schema_id: int, db: AsyncSession = Depends(get_db)):
+    """Get all category mappings for a schema."""
+    from models.database import SchemaCategory
+
+    result = await db.execute(
+        select(SchemaCategory)
+        .where(SchemaCategory.schema_id == schema_id)
+        .order_by(SchemaCategory.priority, SchemaCategory.category_name)
+    )
+    mappings = result.scalars().all()
+
+    return [
+        {
+            "category_name": m.category_name,
+            "priority": m.priority,
+        }
+        for m in mappings
+    ]
+
+
+class SchemaCategoryMapping(BaseModel):
+    category_name: str
+    priority: int = 1
+
+
+class UpdateSchemaCategoriesRequest(BaseModel):
+    categories: list[SchemaCategoryMapping]
+
+
+@router.put("/schemas/{schema_id}/categories")
+async def update_schema_categories(
+    schema_id: int,
+    body: UpdateSchemaCategoriesRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update category mappings for a schema."""
+    from models.database import SchemaCategory
+    from sqlalchemy import delete as sql_delete
+
+    result = await db.execute(select(Schema).where(Schema.id == schema_id))
+    schema = result.scalar_one_or_none()
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema not found")
+
+    await db.execute(
+        sql_delete(SchemaCategory).where(SchemaCategory.schema_id == schema_id)
+    )
+
+    for mapping in body.categories:
+        result = await db.execute(
+            select(Category).where(Category.name == mapping.category_name)
+        )
+        category = result.scalar_one_or_none()
+        if not category:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Category '{mapping.category_name}' not found"
+            )
+
+        schema_category = SchemaCategory(
+            schema_id=schema_id,
+            category_name=mapping.category_name,
+            priority=mapping.priority
+        )
+        db.add(schema_category)
+
+    await db.commit()
+
+    result = await db.execute(
+        select(SchemaCategory)
+        .where(SchemaCategory.schema_id == schema_id)
+        .order_by(SchemaCategory.priority, SchemaCategory.category_name)
+    )
+    mappings = result.scalars().all()
+
+    return [
+        {
+            "category_name": m.category_name,
+            "priority": m.priority,
+        }
+        for m in mappings
+    ]
 
 
 # --- Client API Keys ---

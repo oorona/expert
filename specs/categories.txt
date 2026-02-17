@@ -1,0 +1,275 @@
+1. Incident / Diagnostic
+
+    Intent: Something is broken, throwing an error, or behaving unexpectedly.
+
+    User Input: "I'm getting ORA-00600." / "The backup job failed last night."
+
+    Key Output Sections: Error Code, Severity, Root Cause, Remediation Steps.
+
+2. Inventory / Discovery
+
+    Intent: The user wants to know the current state or contents of the system.
+
+    User Input: "List all invalid packages in schema HR." / "What patch version are we running?"
+
+    Key Output Sections:
+
+        query_result: Structured list/table of items (Name, Status, Type).
+
+        summary_stats: Count of items (e.g., "Found 12 invalid objects").
+
+        scope: Context of the search (e.g., "Schema: HR").
+
+3. Impact Analysis (What-If)
+
+    Intent: The user proposes a change and wants to know the consequences/risks before doing it.
+
+    User Input: "What happens if I change pga_aggregate_target to 50GB?" / "Can I drop index idx_cust_id?"
+
+    Key Output Sections:
+
+        risk_level: High/Medium/Low.
+
+        dependencies: What relies on this (e.g., "3 reports use this index").
+
+        side_effects: Performance or stability implications.
+
+        restart_required: Boolean (True/False).
+
+4. Performance Tuning
+
+    Intent: The system works, but it is slow or resource-heavy.
+
+    User Input: "Why is query 83aa76b taking 5 minutes?" / "The CPU spiked at 9 AM."
+
+    Key Output Sections:
+
+        bottleneck: The limiting factor (IO, CPU, Locks).
+
+        metrics: Key stats (Wait Events, Execution Plan cost).
+
+        optimization_suggestion: Specific advice (e.g., "Create composite index", "Gather stats").
+
+5. Procedural / How-To
+
+    Intent: The user needs a step-by-step guide to perform a specific task.
+
+    User Input: "How do I clone the production DB to test?" / "Walk me through restoring a control file."
+
+    Key Output Sections:
+
+        prerequisites: What is needed before starting.
+
+        steps: Ordered list of actions.
+
+        verification: How to check if it worked.
+
+6. Code Generation / Syntax
+
+    Intent: The user wants the system to write or correct specific SQL/PLSQL code.
+
+    User Input: "Write a script to kill all sessions for user BOB." / "Fix the syntax error in this trigger."
+
+    Key Output Sections:
+
+        code_block: The actual executable code.
+
+        explanation: Brief note on what the code does.
+
+        safety_warning: If the code is destructive (e.g., DROP, KILL).
+
+7. Concept / Education
+
+    Intent: The user lacks domain knowledge and wants a definition or theoretical explanation.
+
+    User Input: "What is the difference between a heap table and an IOT?" / "Explain 'Snapshot too old'."
+
+    Key Output Sections:
+
+        definition: Concise dictionary-style answer.
+
+        analogy: Simplified explanation (ELI5).
+
+        best_use_case: When to use this feature.
+
+8. Security / Compliance
+
+    Intent: Questions regarding permissions, users, audit trails, or vulnerability.
+
+    User Input: "Who has ALTER SYSTEM privileges?" / "Is TDE encryption enabled?"
+
+    Key Output Sections:
+
+        compliance_status: Compliant/Non-Compliant.
+
+        vulnerability_list: Potential holes found.
+
+        audit_evidence: Log entry or setting value proving the status.
+
+9. Capacity Planning
+
+    Intent: Forward-looking questions about storage, growth, or resource limits.
+
+    User Input: "When will the DATA tablespace fill up?" / "Do we have space for a 2TB import?"
+
+    Key Output Sections:
+
+        forecast: Date/Time of resource exhaustion.
+
+        current_utilization: Percentage used vs. free.
+
+        growth_rate: Historical trend (e.g., "+5GB/day").
+
+10. Operational Status / Health
+
+    Intent: High-level check on system availability and "pulse."
+
+    User Input: "Is the listener up?" / "Are the standby databases in sync?"
+
+    Key Output Sections:
+
+        status: Up/Down/Degraded.
+
+        lag/latency: Time delay (if applicable).
+
+        uptime: How long it has been running.
+        
+11. Architecture & Design
+
+    Intent: The user is planning a new system, designing a schema, or configuring High Availability (HA) and needs strategic advice.
+
+    User Input: "Should I use a Star Schema or Snowflake for this data warehouse?" / "What is the best way to set up Active Data Guard across two cloud regions?"
+
+    Key Output Sections:
+
+        recommended_pattern: The industry-standard approach.
+
+        pros_and_cons: A brief table weighing the trade-offs (e.g., Read performance vs. Write latency).
+
+        visual_representation:  A diagram or text-based topology of the proposed design.
+
+12. Backup & Disaster Recovery (BDR)
+
+    Intent: The user is either configuring backups, checking their validity, or initiating a critical restore operation.
+
+    User Input: "Can we recover table ORDERS to yesterday at 5:00 PM?" / "Is our RMAN backup strategy meeting the 1-hour RPO?"
+
+    Key Output Sections:
+
+        feasibility: Yes/No based on current configuration (e.g., "Yes, Flashback is enabled").
+
+        recovery_window: The exact timeframe available for point-in-time recovery.
+
+        required_artifacts: What files/logs are needed (e.g., "Requires Backup Set 44 and Archivelogs 102-105").
+
+13. Patching & Lifecycle Management
+
+    Intent: Questions about versioning, upgrades, end-of-life (EOL) support, and applying Release Updates (RUs).
+
+    User Input: "What are the prerequisites for applying the October 2023 RU?" / "When does Oracle 19c extended support end?"
+
+    Key Output Sections:
+
+        version_info: Current version vs. Target version.
+
+        compatibility_matrix: What else might break (e.g., "Requires updating the JDBC drivers on the app servers").
+
+        estimated_downtime: Expected maintenance window required.
+
+14. Data Movement & Migration
+
+    Intent: The user needs to move large volumes of data in, out, or across environments.
+
+    User Input: "What's the fastest way to export a 500GB schema to AWS?" / "How do I set up GoldenGate for zero-downtime migration?"
+
+    Key Output Sections:
+
+        tool_recommendation: The right tool for the job (e.g., Data Pump, GoldenGate, SQL*Loader).
+
+        performance_parameters: Tuning flags (e.g., PARALLEL=8, DIRECT=TRUE).
+
+        data_mapping_risks: Warnings about character sets, endianness, or unsupported data types.
+
+15. Cost & Licensing Optimization
+
+    Intent: (Crucial for Cloud/Enterprise DBAs) The user wants to understand the financial impact of a technical decision.
+
+    User Input: "How much will enabling Advanced Compression cost us?" / "Can we scale down the OCPUs on the autonomous database over the weekend?"
+
+    Key Output Sections:
+
+        licensing_impact: Does this trigger a new enterprise feature pack requirement?
+
+        estimated_cost_change: Projected increase or decrease in cloud spend/compute.
+
+        optimization_alternative: A cheaper way to achieve a similar result.
+
+16. Network & Connectivity
+
+    Intent: The database might be healthy, but applications or users cannot reach it due to listener, TNS, firewall, or protocol issues.
+
+    User Input: "Why am I getting ORA-12154: TNS:could not resolve the connect identifier specified?" / "Is the listener accepting connections on port 1521?"
+
+    Key Output Sections:
+
+        connection_path: The hop-by-hop route (e.g., Client -> Firewall -> VIP -> Listener -> Instance).
+
+        listener_status: Up/Down, registered services, and protocol rules.
+
+        diagnostic_test: A command to test connectivity (e.g., tnsping, telnet).
+
+17. Concurrency & Locking
+
+    Intent: Users are experiencing hangs or timeouts not because of poor query plans, but because sessions are blocking each other fighting for the same rows or resources.
+
+    User Input: "Who is locking the EMPLOYEES table?" / "Find the root blocking session for this deadlock chain."
+
+    Key Output Sections:
+
+        blocking_tree: A hierarchical list of who is blocking whom (Session A -> Session B -> Session C).
+
+        lock_type: Row share, Exclusive, DML, or DDL lock.
+
+        resolution_action: The exact ALTER SYSTEM KILL SESSION command for the culprit.
+
+18. Job Scheduling & Automation
+
+    Intent: Troubleshooting or managing internal database cron jobs, maintenance windows, or DBMS_SCHEDULER tasks.
+
+    User Input: "Why didn't the stats gathering job run last night?" / "Create a schedule to run this stored procedure every Sunday at 2 AM."
+
+    Key Output Sections:
+
+        job_status: Running, Failed, Scheduled, or Broken.
+
+        run_history: Last successful execution and duration.
+
+        next_run_time: When it is slated to fire next (converted to the user's local timezone).
+
+19. Configuration Drift & Baselines
+
+    Intent: The user wants to compare the current system state against a previous baseline or a different environment (e.g., "Dev vs. Prod").
+
+    User Input: "What initialization parameters differ between Node 1 and Node 2?" / "Did someone change the spfile since yesterday?"
+
+    Key Output Sections:
+
+        drift_delta: A table showing Parameter | Expected Value | Actual Value.
+
+        modified_by: The user/timestamp of the change (if auditing is enabled).
+
+        rollback_command: How to revert to the baseline.
+
+20. Cloud & Infrastructure Provisioning
+
+    Intent: Dealing with the underlying host, storage mounts (ASM/SAN), or cloud-specific control plane actions (OCI, AWS RDS).
+
+    User Input: "How do I attach a new block volume to ASM diskgroup +DATA?" / "Scale up the Autonomous Database to 16 OCPUs."
+
+    Key Output Sections:
+
+        infrastructure_layer: Is this an OS, Storage, or Cloud API level task?
+
+        cli_payload: The OCI CLI, AWS CLI, or Terraform snippet needed.
+
+        downtime_implication: Whether this infrastructure change requires a reboot or instance restart.

@@ -1,0 +1,107 @@
+{
+  "schema": {
+    "type": "object",
+    "required": [
+      "title",
+      "concept_term",
+      "simple_definition",
+      "technical_definition",
+      "use_cases",
+      "official_references",
+      "visual_aid_suggested"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "The topic being explained (e.g., 'Understanding Transparent Data Encryption', 'Oracle 19c Patching Lifecycle')."
+      },
+      "use_cases": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "scenario",
+            "why_it_fits"
+          ],
+          "properties": {
+            "scenario": {
+              "type": "string",
+              "description": "A real-world business or technical scenario."
+            },
+            "why_it_fits": {
+              "type": "string",
+              "description": "Why this concept/feature is the right choice for the scenario."
+            }
+          }
+        },
+        "description": "When and why to use this feature."
+      },
+      "concept_term": {
+        "type": "string",
+        "description": "The specific feature, rule, or concept requested."
+      },
+      "compliance_rules": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Any strict rules, licensing constraints, or security implications to be aware of."
+      },
+      "simple_definition": {
+        "type": "string",
+        "description": "An ELI5 (Explain Like I'm 5) analogy or plain-english description."
+      },
+      "official_references": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "doc_title",
+            "url"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "A valid URL or Support ID."
+            },
+            "doc_title": {
+              "type": "string",
+              "description": "Title of the Oracle Doc or MOS Note."
+            }
+          }
+        },
+        "description": "Links for further reading."
+      },
+      "technical_definition": {
+        "type": "string",
+        "description": "The highly technical, deep-dive explanation of how it works under the hood."
+      },
+      "visual_aid_suggested": {
+        "type": "boolean",
+        "description": "Whether an infographic would help explain the concept."
+      },
+      "image_generation_prompt": {
+        "type": "string",
+        "description": "Detailed prompt for generating an educational infographic explaining the theory or mechanics of the concept."
+      }
+    }
+  },
+  "categories": [
+    {
+      "category_name": "Cloud_Infrastructure",
+      "priority": 1
+    },
+    {
+      "category_name": "Concept_Education",
+      "priority": 1
+    },
+    {
+      "category_name": "Patching_Lifecycle",
+      "priority": 1
+    },
+    {
+      "category_name": "Security_Compliance",
+      "priority": 1
+    }
+  ]
+}

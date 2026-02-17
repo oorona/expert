@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDate, truncate } from "@/lib/utils";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
+import type { IncidentCategory } from "@/types";
 
 interface SessionItem {
   type: "session";
@@ -14,6 +16,7 @@ interface SessionItem {
   error_summary?: string | null;
   status?: string;
   expert_id?: number | null;
+  categories?: IncidentCategory[];
   created_at: string;
 }
 
@@ -113,6 +116,20 @@ export function ArticleList({ items, onDelete, experts = [] }: Props) {
                       <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium">
                         {getExpertName(item.expert_id)}
                       </span>
+                    )}
+                    {item.type === "session" && item.categories && item.categories.length > 0 && (
+                      <>
+                        {item.categories.map((cat, idx) => (
+                          <CategoryBadge
+                            key={idx}
+                            category={cat.category}
+                            confidence={cat.confidence}
+                            isPrimary={cat.primary}
+                            size="sm"
+                            showConfidence={false}
+                          />
+                        ))}
+                      </>
                     )}
                     {item.type === "session" && (
                       <span className="text-xs text-gray-400 dark:text-gray-500">

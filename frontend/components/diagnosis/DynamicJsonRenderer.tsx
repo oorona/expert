@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CodeBlock } from "@/components/ui/CodeBlock";
 
 interface Props {
   data: Record<string, unknown>;
@@ -35,6 +36,7 @@ export function DynamicJsonRenderer({ data }: Props) {
   }
 
   const priorityKeys = [
+    // Fixer / general
     "error_summary",
     "severity",
     "root_cause",
@@ -42,15 +44,29 @@ export function DynamicJsonRenderer({ data }: Props) {
     "resolution_steps",
     "preventive_measures",
     "additional_notes",
+    // Developer schema
+    "script_summary",
+    "safety_warning",
+    "primary_language",
+    "code",
+    "explanation",
+    "variables_to_replace",
   ];
   const metadataKeys = ["title", "visual_aid_suggested", "image_generation_prompt", "expert_id"];
   const extraKeys = Object.keys(data).filter((k) => !priorityKeys.includes(k) && !metadataKeys.includes(k));
   const allKeys = [...priorityKeys.filter((k) => k in data), ...extraKeys];
 
+  const primaryLanguage = typeof data["primary_language"] === "string" ? data["primary_language"] : undefined;
+
   return (
     <div className="space-y-4">
       {allKeys.map((key) => (
-        <Section key={key} sectionKey={key} value={data[key]} />
+        <Section
+          key={key}
+          sectionKey={key}
+          value={data[key]}
+          language={key === "code" ? primaryLanguage : undefined}
+        />
       ))}
     </div>
   );
@@ -100,7 +116,7 @@ function UnstructuredResponse({ text }: { text: string }) {
   );
 }
 
-function Section({ sectionKey, value }: { sectionKey: string; value: unknown }) {
+function Section({ sectionKey, value, language }: { sectionKey: string; value: unknown; language?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const icon = SECTION_ICONS[sectionKey] || "📄";
   const title = sectionKey.replace(/_/g, " ");
@@ -147,17 +163,42 @@ function Section({ sectionKey, value }: { sectionKey: string; value: unknown }) 
         </span>
       </button>
       {!collapsed && (
-        <div className="px-4 py-3">
-          <SectionContent sectionKey={sectionKey} value={value} />
+        <div className={sectionKey === "code" ? "" : "px-4 py-3"}>
+          <SectionContent sectionKey={sectionKey} value={value} language={language} />
         </div>
       )}
     </div>
   );
 }
 
-function SectionContent({ sectionKey, value }: { sectionKey: string; value: unknown }) {
+function guessLanguage(cmd: string): string | undefined {
+  const t = cmd.trimStart().toUpperCase();
+  if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|BEGIN|DECLARE|MERGE|TRUNCATE|WITH\s)/.test(t)) return "sql";
+  if (/^(#!\/bin\/(ba)?sh|#!\/usr\/bin\/(env\s+)?(ba)?sh)/.test(cmd) || /\b(grep|sed|awk|docker|kubectl|git|chmod|chown|sudo|systemctl|service|psql|sqlplus|rman)\b/.test(cmd)) return "bash";
+  if (/^(def |class |import |from .* import|print\(|if __name__)/.test(cmd)) return "python";
+  return undefined;
+}
+
+function SectionContent({ sectionKey, value, language }: { sectionKey: string; value: unknown; language?: string }) {
   if (value === null || value === undefined) {
     return <span className="text-gray-400 dark:text-gray-500 italic text-sm">N/A</span>;
+  }
+
+  // Developer schema: code block with syntax highlighting
+  if (sectionKey === "code" && typeof value === "string") {
+    return (
+      <div className="relative group">
+        <CodeBlock code={value} language={language} />
+        <button
+          type="button"
+          onClick={() => navigator.clipboard.writeText(value)}
+          className="absolute top-10 right-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Copy code"
+        >
+          📋 Copy
+        </button>
+      </div>
+    );
   }
 
   // Numbered steps for resolution_steps and preventive_measures
@@ -180,15 +221,14 @@ function SectionContent({ sectionKey, value }: { sectionKey: string; value: unkn
                   <p className="text-sm text-gray-700 dark:text-gray-300">{step.action}</p>
                   {step.command && (
                     <div className="mt-2 relative group">
-                      <pre className="bg-gray-900 dark:bg-gray-950 text-green-400 dark:text-green-300 text-xs p-3 rounded-lg overflow-x-auto font-mono whitespace-pre-wrap break-words border border-gray-700 dark:border-gray-600">
-                        {step.command}
-                      </pre>
+                      <CodeBlock
+                        code={step.command}
+                        language={guessLanguage(step.command)}
+                      />
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(step.command!);
-                        }}
-                        className="absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => navigator.clipboard.writeText(step.command!)}
+                        className="absolute top-9 right-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Copy command"
                       >
                         📋 Copy

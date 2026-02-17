@@ -5,6 +5,7 @@ import type { ExpertItem } from "@/types";
 
 interface Props {
   onSubmit: (formData: FormData) => void;
+  onNew?: () => void;
   loading: boolean;
   model: string;
   temperature: number;
@@ -19,6 +20,7 @@ interface Props {
 
 export function ErrorInput({
   onSubmit,
+  onNew,
   loading,
   model,
   temperature,
@@ -163,13 +165,24 @@ export function ErrorInput({
         )}
       </div>
 
-      <button
-        type="submit"
-        disabled={loading || (!errorText && !imageFile) || !expertId}
-        className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-      >
-        {loading ? "Analyzing..." : !expertId ? "Select an Expert to Diagnose" : "Diagnose Error"}
-      </button>
+      <div className="flex gap-2">
+        {onNew && (
+          <button
+            type="button"
+            onClick={onNew}
+            className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+          >
+            + New
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={loading || (!errorText && !imageFile) || !expertId}
+          className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? "Analyzing..." : !expertId ? "Select an Expert First" : "Ask Expert"}
+        </button>
+      </div>
     </form>
   );
 }

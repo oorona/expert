@@ -7,6 +7,7 @@ import type { SchemaItem } from "@/types";
 
 export default function SchemasPage() {
   const [schemas, setSchemas] = useState<SchemaItem[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -20,6 +21,7 @@ export default function SchemasPage() {
     try {
       const data = await listSchemas();
       setSchemas(data);
+      setSelectedId((prev) => prev ?? (data[0]?.id ?? null));
     } catch {
       // Backend may not be ready
     } finally {
@@ -51,12 +53,14 @@ export default function SchemasPage() {
     }
   }
 
+  const selectedSchema = schemas.find((s) => s.id === selectedId) ?? null;
+
   if (loading) {
     return <p className="text-center text-gray-500 dark:text-gray-400 py-8">Loading...</p>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold dark:text-gray-100">Schema Manager</h2>
         <button
@@ -66,6 +70,17 @@ export default function SchemasPage() {
           + New Schema
         </button>
       </div>
+
+      {/* Schema selector */}
+      <select
+        value={selectedId ?? ""}
+        onChange={(e) => setSelectedId(Number(e.target.value))}
+        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 dark:text-gray-100"
+      >
+        {schemas.map((s) => (
+          <option key={s.id} value={s.id}>{s.name}</option>
+        ))}
+      </select>
 
       {showCreate && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
@@ -90,16 +105,13 @@ export default function SchemasPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {schemas.map((s) => (
-          <SchemaEditor
-            key={s.id}
-            schema={s}
-            onSave={handleSave}
-            onToggle={handleToggle}
-          />
-        ))}
-      </div>
+      {selectedSchema && (
+        <SchemaEditor
+          schema={selectedSchema}
+          onSave={handleSave}
+          onToggle={handleToggle}
+        />
+      )}
     </div>
   );
 }

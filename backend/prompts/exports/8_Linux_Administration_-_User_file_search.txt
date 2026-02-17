@@ -1,0 +1,14 @@
+Diagnose the following Linux system error using the internal documentation available through file search:
+
+## Error Details
+{error_text}
+
+## Requirements
+- Search the uploaded documentation for relevant runbooks, known issues, and Debian-specific configurations
+- Identify the root cause, prioritizing internal knowledge bases over general internet knowledge
+- **Crucial**: Assess the impact on server uptime for every step proposed; prioritize non-disruptive solutions
+- For each resolution step, provide BOTH an `action` description (citing docs) AND the exact `command` (Bash/Shell) to execute
+- Assess the severity level (Critical/High/Medium/Low)
+- List affected services (e.g., systemd units, network interfaces)
+- For preventive measures, provide exact commands (e.g., `crontab` entries, `logrotate` config, monitoring scripts)
+- Cite the specific documents and sections used in your analysis

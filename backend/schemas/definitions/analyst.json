@@ -1,0 +1,118 @@
+{
+  "schema": {
+    "type": "object",
+    "required": [
+      "title",
+      "analysis_summary",
+      "risk_level",
+      "downtime_required",
+      "impact_details",
+      "alternatives",
+      "visual_aid_suggested"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "A concise title summarizing the proposed change or analysis (max 80 chars)."
+      },
+      "risk_level": {
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "type": "string",
+        "description": "The overall risk of implementing this change."
+      },
+      "alternatives": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "approach",
+            "pros",
+            "cons"
+          ],
+          "properties": {
+            "cons": {
+              "type": "string",
+              "description": "Drawbacks of this alternative."
+            },
+            "pros": {
+              "type": "string",
+              "description": "Why this alternative is good."
+            },
+            "approach": {
+              "type": "string",
+              "description": "Name of the alternative method."
+            }
+          }
+        },
+        "description": "At least one alternative way to achieve the same goal."
+      },
+      "rollback_plan": {
+        "type": "string",
+        "description": "The exact command or process to revert this change if it fails. Must be highly specific."
+      },
+      "impact_details": {
+        "type": "object",
+        "required": [
+          "performance",
+          "financial",
+          "dependencies"
+        ],
+        "properties": {
+          "financial": {
+            "type": "string",
+            "description": "Expected changes to licensing, cloud compute costs, or storage costs."
+          },
+          "performance": {
+            "type": "string",
+            "description": "Expected impact on CPU, I/O, memory, or query latency."
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of systems, schemas, or applications that rely on the component being changed."
+          }
+        }
+      },
+      "analysis_summary": {
+        "type": "string",
+        "description": "A 1-2 sentence executive summary of what this change/plan will accomplish and its primary consequence."
+      },
+      "downtime_required": {
+        "type": "boolean",
+        "description": "True if this operation requires taking the system offline or restarting instances."
+      },
+      "visual_aid_suggested": {
+        "type": "boolean",
+        "description": "Whether an architecture or topology diagram would help illustrate this plan."
+      },
+      "image_generation_prompt": {
+        "type": "string",
+        "description": "If visual_aid_suggested is true, provide a detailed prompt (200-400 words) for generating an architecture or topology diagram."
+      }
+    }
+  },
+  "categories": [
+    {
+      "category_name": "Architecture_Design",
+      "priority": 1
+    },
+    {
+      "category_name": "Capacity_Planning",
+      "priority": 1
+    },
+    {
+      "category_name": "Cost_Licensing",
+      "priority": 1
+    },
+    {
+      "category_name": "Impact_Analysis",
+      "priority": 1
+    }
+  ]
+}

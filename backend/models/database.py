@@ -18,9 +18,10 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -144,6 +145,9 @@ class Incident(Base):
     infographic_data: Mapped[str | None] = mapped_column(Text)  # Base64 encoded image
     infographic_prompt: Mapped[str | None] = mapped_column(Text)  # Prompt used to generate
     notes: Mapped[str] = mapped_column(Text, server_default="''", nullable=False)
+    categories: Mapped[list] = mapped_column(JSONB, server_default="'[]'", nullable=False)
+    schema_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    classification_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(
         String(20), server_default="'manual'", nullable=False
     )
@@ -322,4 +326,75 @@ class OutputSchema(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Schemas (for category-based classification)
+# ---------------------------------------------------------------------------
+
+class Schema(Base):
+    __tablename__ = "schemas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(Text, server_default="", nullable=False)
+    json_schema: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("idx_schemas_active", "is_active"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Categories (20 category types for classification)
+# ---------------------------------------------------------------------------
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    name: Mapped[str] = mapped_column(String(50), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    intent_description: Mapped[str] = mapped_column(Text, nullable=False)
+    example_inputs: Mapped[list] = mapped_column(ARRAY(Text), server_default="{}", nullable=False)
+    key_outputs: Mapped[list] = mapped_column(ARRAY(Text), server_default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ---------------------------------------------------------------------------
+# Schema-Category Mappings
+# ---------------------------------------------------------------------------
+
+class SchemaCategory(Base):
+    __tablename__ = "schema_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schema_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("schemas.id", ondelete="CASCADE"), nullable=False
+    )
+    category_name: Mapped[str] = mapped_column(
+        String(50), ForeignKey("categories.name", ondelete="CASCADE"), nullable=False
+    )
+    priority: Mapped[int] = mapped_column(Integer, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("schema_id", "category_name", name="uq_schema_category"),
+        Index("idx_schema_categories_schema", "schema_id"),
+        Index("idx_schema_categories_category", "category_name"),
     )

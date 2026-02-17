@@ -1,0 +1,83 @@
+{
+  "schema": {
+    "type": "object",
+    "required": [
+      "title",
+      "script_summary",
+      "primary_language",
+      "safety_warning",
+      "variables_to_replace",
+      "code",
+      "explanation",
+      "visual_aid_suggested"
+    ],
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "The complete, unified, executable script. Must be copy-paste ready, properly indented, and include inline comments where helpful."
+      },
+      "title": {
+        "type": "string",
+        "description": "A concise title for the script (max 80 chars). Good examples: 'PL/SQL Script to Purge Old Audit Logs', 'Bash Script for RMAN Backup Automation'."
+      },
+      "explanation": {
+        "type": "string",
+        "description": "A detailed breakdown explaining the logic of the script, how it works under the hood, and what expected output it will generate."
+      },
+      "safety_warning": {
+        "type": "string",
+        "description": "Critical warnings about executing this code. Highlight any destructive commands (DROP, DELETE, KILL, TRUNCATE) or performance impacts. If perfectly safe, state 'Safe to run in any environment'."
+      },
+      "script_summary": {
+        "type": "string",
+        "description": "A 1-2 sentence explanation of exactly what this code will accomplish when executed."
+      },
+      "primary_language": {
+        "enum": [
+          "sql",
+          "plsql",
+          "bash",
+          "python",
+          "other"
+        ],
+        "type": "string",
+        "description": "The primary programming or scripting language used in this response."
+      },
+      "variables_to_replace": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "placeholder",
+            "description"
+          ],
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "What the user should replace it with."
+            },
+            "placeholder": {
+              "type": "string",
+              "description": "The exact string in the code that the user must replace (e.g., '<TARGET_SCHEMA>', '<PASSWORD>')."
+            }
+          }
+        },
+        "description": "List of all variables, credentials, or environment-specific strings the user must change before running the code. Leave empty if the code runs as-is."
+      },
+      "visual_aid_suggested": {
+        "type": "boolean",
+        "description": "Whether an Entity-Relationship Diagram (ERD), state machine, or logic flowchart would help illustrate what this code builds or does."
+      },
+      "image_generation_prompt": {
+        "type": "string",
+        "description": "If visual_aid_suggested is true, provide a detailed prompt (200-400 words) for generating a technical diagram (like an ERD or logic flow) that represents the code."
+      }
+    }
+  },
+  "categories": [
+    {
+      "category_name": "Code_Generation",
+      "priority": 1
+    }
+  ]
+}

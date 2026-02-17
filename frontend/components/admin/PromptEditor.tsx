@@ -96,7 +96,7 @@ export function PromptEditor({ prompt, onSave, onToggle }: Props) {
           setContent(e.target.value);
           setDirty(true);
         }}
-        className="w-full h-48 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm font-mono resize-y focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 dark:text-gray-100"
+        className="w-full h-[60vh] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm font-mono resize-y focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 dark:text-gray-100"
       />
     </div>
   );

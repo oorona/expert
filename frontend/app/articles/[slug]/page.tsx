@@ -8,6 +8,7 @@ import { SourcesList } from "@/components/diagnosis/SourcesList";
 import { InfographicGenerator } from "@/components/diagnosis/InfographicGenerator";
 import { RelatedArticles } from "@/components/articles/RelatedArticles";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { CategoryBadge } from "@/components/ui/CategoryBadge";
 import { formatDate, truncate } from "@/lib/utils";
 import type { SessionDetail } from "@/types";
 import Link from "next/link";
@@ -149,6 +150,32 @@ export default function ArticlePage() {
             {detail.model_used && <span>Model: {detail.model_used}</span>}
             <span className="font-mono">Session {detail.session_id.slice(0, 8)}</span>
           </div>
+
+          {/* Categories section */}
+          {detail.categories && detail.categories.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Categories
+              </h3>
+              <div className="flex gap-2 flex-wrap">
+                {detail.categories.map((cat, idx) => (
+                  <CategoryBadge
+                    key={idx}
+                    category={cat.category}
+                    confidence={cat.confidence}
+                    isPrimary={cat.primary}
+                    size="md"
+                    showConfidence={true}
+                  />
+                ))}
+              </div>
+              {detail.classification_reasoning && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                  <strong>Classification:</strong> {detail.classification_reasoning}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Structured content */}

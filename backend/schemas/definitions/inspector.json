@@ -1,0 +1,108 @@
+{
+  "schema": {
+    "type": "object",
+    "required": [
+      "title",
+      "inspection_summary",
+      "overall_health",
+      "findings",
+      "visual_aid_suggested"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Title of the report (e.g., 'AWR Performance Analysis', 'Invalid Object Inventory')."
+      },
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "item_name",
+            "current_value"
+          ],
+          "properties": {
+            "notes": {
+              "type": "string",
+              "description": "Why this finding matters."
+            },
+            "item_name": {
+              "type": "string",
+              "description": "The metric, parameter, or object found."
+            },
+            "current_value": {
+              "type": "string",
+              "description": "The actual value or status observed."
+            },
+            "expected_value": {
+              "type": "string",
+              "description": "The baseline or recommended value (if applicable)."
+            }
+          }
+        },
+        "description": "The raw data payload, list of objects, or parameter diffs."
+      },
+      "overall_health": {
+        "enum": [
+          "healthy",
+          "degraded",
+          "down",
+          "unknown"
+        ],
+        "type": "string",
+        "description": "Current state of the inspected target."
+      },
+      "inspection_summary": {
+        "type": "string",
+        "description": "High-level summary of what was found during the inspection."
+      },
+      "visual_aid_suggested": {
+        "type": "boolean",
+        "description": "Whether a chart or dashboard mockup would help."
+      },
+      "tuning_recommendations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "action",
+            "command"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "What to change to fix a degraded finding."
+            },
+            "command": {
+              "type": "string",
+              "description": "The SQL/CLI command to apply the tune."
+            }
+          }
+        },
+        "description": "Actionable fixes for any negative findings."
+      },
+      "image_generation_prompt": {
+        "type": "string",
+        "description": "Detailed prompt for generating a chart (pie/bar/line) or dashboard layout visualizing the findings."
+      }
+    }
+  },
+  "categories": [
+    {
+      "category_name": "Configuration_Drift",
+      "priority": 1
+    },
+    {
+      "category_name": "Inventory_Discovery",
+      "priority": 1
+    },
+    {
+      "category_name": "Operational_Status",
+      "priority": 1
+    },
+    {
+      "category_name": "Performance_Tuning",
+      "priority": 2
+    }
+  ]
+}

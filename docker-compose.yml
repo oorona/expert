@@ -29,6 +29,9 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_DB=expert
       - POSTGRES_HOST=expert-db
+    volumes:
+      - ./backend/schemas:/app/schemas
+      - ./backend/backups:/app/backups
     networks:
       - internet
       - intranet
@@ -45,10 +48,18 @@ services:
       dockerfile: Dockerfile
     container_name: expert-db
     restart: always
+    stop_grace_period: 60s
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
       - POSTGRES_DB=expert
+    command: >
+      postgres
+      -c checkpoint_timeout=60s
+      -c checkpoint_completion_target=0.7
+      -c wal_buffers=16MB
+      -c synchronous_commit=on
+      -c fsync=on
     volumes:
       - expert_db_data:/var/lib/postgresql
     networks:

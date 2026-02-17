@@ -20,9 +20,6 @@ class UpdateNotesRequest(BaseModel):
     notes: str | None = None
 
 
-VALID_STATUSES = ("created", "pending_review", "in_review", "analyzed", "closed")
-
-
 class UpdateStatusRequest(BaseModel):
     status: Literal["created", "pending_review", "in_review", "analyzed", "closed"]
 
@@ -59,6 +56,7 @@ async def list_incidents(
             "title": (i.raw_json or {}).get("title"),
             "error_summary": (i.raw_json or {}).get("error_summary"),
             "expert_id": (i.raw_json or {}).get("expert_id"),
+            "categories": i.categories or [],
             "source": i.source,
             "status": i.status,
             "created_at": i.created_at.isoformat(),
@@ -118,7 +116,6 @@ async def get_incident(session_id: UUID, db: AsyncSession = Depends(get_db)):
     )
     chat_msgs = result.scalars().all()
 
-    # Load related articles
     related_rows = await db.execute(
         select(RelatedIncident)
         .where(RelatedIncident.incident_id == incident.id)
@@ -132,7 +129,6 @@ async def get_incident(session_id: UUID, db: AsyncSession = Depends(get_db)):
             .order_by(Incident.created_at)
         )
         for ri in rel_result.scalars().all():
-            # Find the relation type for this specific link
             link = next((r for r in related_links if r.related_id == ri.id), None)
             related_articles.append({
                 "id": ri.id,
@@ -284,7 +280,6 @@ async def link_articles(
     if not inc_a or not inc_b:
         raise HTTPException(status_code=404, detail="One or both incidents not found")
 
-    # Insert both directions, ignore if already linked
     for a_id, b_id, rtype in [
         (inc_a.id, inc_b.id, body.relation_type),
         (inc_b.id, inc_a.id, body.relation_type),

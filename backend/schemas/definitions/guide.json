@@ -1,0 +1,114 @@
+{
+  "schema": {
+    "type": "object",
+    "required": [
+      "title",
+      "task_overview",
+      "complexity",
+      "estimated_time_minutes",
+      "prerequisites",
+      "execution_steps",
+      "verification_steps",
+      "visual_aid_suggested"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "A concise, action-oriented title for the procedure (e.g., 'Cloning a Pluggable Database', 'Exporting Schema via Data Pump')."
+      },
+      "complexity": {
+        "enum": [
+          "basic",
+          "intermediate",
+          "advanced"
+        ],
+        "type": "string",
+        "description": "Skill level required to execute this safely."
+      },
+      "prerequisites": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Conditions that must be met before starting (e.g., 'Target DB must be in MOUNT state')."
+      },
+      "task_overview": {
+        "type": "string",
+        "description": "Brief summary of the procedure's goal."
+      },
+      "execution_steps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "step_description",
+            "command",
+            "expected_output"
+          ],
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The EXACT executable code, SQL, or CLI command. Copy-paste ready."
+            },
+            "expected_output": {
+              "type": "string",
+              "description": "What the system should return if the command succeeds."
+            },
+            "step_description": {
+              "type": "string",
+              "description": "Clear explanation of what this step does."
+            }
+          }
+        },
+        "description": "Ordered, sequential steps to complete the task."
+      },
+      "verification_steps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "action",
+            "command"
+          ],
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "What we are verifying."
+            },
+            "command": {
+              "type": "string",
+              "description": "The query or command to verify success."
+            }
+          }
+        },
+        "description": "Steps to prove the procedure worked."
+      },
+      "visual_aid_suggested": {
+        "type": "boolean",
+        "description": "Whether a flow chart would help."
+      },
+      "estimated_time_minutes": {
+        "type": "integer",
+        "description": "Rough estimate of how long the procedure takes to run."
+      },
+      "image_generation_prompt": {
+        "type": "string",
+        "description": "Detailed prompt for generating a flowchart or step-by-step process diagram."
+      }
+    }
+  },
+  "categories": [
+    {
+      "category_name": "Backup_Recovery",
+      "priority": 1
+    },
+    {
+      "category_name": "Data_Movement",
+      "priority": 1
+    },
+    {
+      "category_name": "Procedural_HowTo",
+      "priority": 1
+    }
+  ]
+}

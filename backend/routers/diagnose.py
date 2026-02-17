@@ -5,11 +5,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import InternalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_db
-from models.database import Expert, Incident, OutputSchema, Prompt, RelatedIncident
+from models.database import Expert, Incident, OutputSchema, Prompt, RelatedIncident, Schema
 from security import (
     MAX_ERROR_TEXT_LENGTH,
     rate_limit,
@@ -19,12 +20,37 @@ from security import (
     validate_temperature,
     validate_thinking_level,
 )
+from services.classification import classification_service
 from services.gemini import gemini_service
 from services.similarity import find_similar_incidents, normalize_error_text
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _repair_corrupted_embeddings(db: AsyncSession) -> int:
+    """Null out any incident embedding that has corrupted TOAST data.
+    Returns number of rows repaired."""
+    result = await db.execute(text("""
+        DO $$
+        DECLARE
+            r RECORD;
+            repaired INT := 0;
+        BEGIN
+            FOR r IN SELECT id FROM incidents WHERE embedding IS NOT NULL ORDER BY id LOOP
+                BEGIN
+                    PERFORM embedding FROM incidents WHERE id = r.id;
+                EXCEPTION WHEN others THEN
+                    UPDATE incidents SET embedding = NULL WHERE id = r.id;
+                    repaired := repaired + 1;
+                END;
+            END LOOP;
+        END;
+        $$
+    """))
+    await db.commit()
+    return 0  # PL/pgSQL doesn't return, but repair is done
 
 
 def _json_to_markdown(data: dict) -> str:
@@ -39,7 +65,6 @@ def _json_to_markdown(data: dict) -> str:
         if isinstance(value, list):
             for i, item in enumerate(value, 1):
                 if isinstance(item, dict) and "action" in item:
-                    # Structured step with action + command
                     lines.append(f"{i}. {item['action']}")
                     if item.get("command"):
                         lines.append("")
@@ -80,6 +105,8 @@ async def diagnose_error(
     force: bool = Form(False),
     parent_session_id: Optional[str] = Form(None),
     incident_id: Optional[int] = Form(None),
+    auto_classify: bool = Form(True),
+    schema_id: Optional[int] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     # Validate inputs eagerly (before streaming)
@@ -101,8 +128,12 @@ async def diagnose_error(
         def sse(event: str, data: dict) -> str:
             return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
-        total_steps = 5
+        total_steps = 6 if (auto_classify and error_text and not schema_id) else 5
         step = 0
+
+        classification_result = None
+        selected_schema_id = schema_id  # Use override if provided
+        selected_schema_name = None
 
         # Step 1: Check for similar incidents
         step += 1
@@ -116,14 +147,29 @@ async def diagnose_error(
                 db, embedding, exclude_id=incident_id
             )
 
-        # Duplicate detection
         if similar and not force:
             best = similar[0]
             if best["similarity"] >= 0.90:
                 yield sse("done", {"duplicate_of": best})
                 return
 
-        # Step 2: Load prompts & schema
+        # Step 2 (optional): Classify input
+        if auto_classify and error_text and not schema_id:
+            step += 1
+            yield sse("progress", {"step": step, "total": total_steps, "message": "Classifying input…"})
+            try:
+                classification_result = await classification_service.classify_input(
+                    error_text, db, model=model
+                )
+                selected_schema_id, selected_schema_name = await classification_service.select_schema(
+                    classification_result, db
+                )
+                logger.info(f"Auto-classified to schema: {selected_schema_name} (id={selected_schema_id})")
+            except Exception as e:
+                logger.warning(f"Classification failed, will use default schema: {e}")
+                # Continue without classification - will use OutputSchema fallback
+
+        # Step 3: Load prompts & schema
         step += 1
         yield sse("progress", {"step": step, "total": total_steps, "message": "Loading prompts & schema…"})
 
@@ -160,14 +206,32 @@ async def diagnose_error(
             return
         user_template = user_row.content
 
-        result = await db.execute(
-            select(OutputSchema)
-            .where(OutputSchema.is_active == True)  # noqa: E712
-            .order_by(OutputSchema.id)
-            .limit(1)
-        )
-        schema_row = result.scalar_one_or_none()
-        output_schema = schema_row.schema_json if schema_row else None
+        output_schema = None
+        if selected_schema_id:
+            result = await db.execute(
+                select(Schema).where(
+                    Schema.id == selected_schema_id,
+                    Schema.is_active == True  # noqa: E712
+                )
+            )
+            schema_row = result.scalar_one_or_none()
+            if schema_row:
+                output_schema = schema_row.json_schema
+                selected_schema_name = schema_row.name
+                logger.info(f"Using schema: {selected_schema_name} (id={selected_schema_id})")
+
+        # Fallback to old OutputSchema if no categorized schema
+        if not output_schema:
+            result = await db.execute(
+                select(OutputSchema)
+                .where(OutputSchema.is_active == True)  # noqa: E712
+                .order_by(OutputSchema.id)
+                .limit(1)
+            )
+            schema_row = result.scalar_one_or_none()
+            output_schema = schema_row.schema_json if schema_row else None
+            if schema_row:
+                logger.info("Using legacy OutputSchema")
         user_prompt = user_template.replace("{error_text}", error_text)
 
         file_search_store_names: list[str] | None = None
@@ -179,7 +243,7 @@ async def diagnose_error(
             if expert and expert.file_search_store_name:
                 file_search_store_names = [expert.file_search_store_name]
 
-        # Step 3: Call Gemini LLM (streaming thoughts)
+        # Step 4: Call Gemini LLM (streaming thoughts)
         step += 1
         yield sse("progress", {"step": step, "total": total_steps, "message": "Analyzing with Gemini…"})
 
@@ -209,7 +273,7 @@ async def diagnose_error(
             yield sse("error", {"message": "No result from Gemini"})
             return
 
-        # Step 4: Generate markdown
+        # Step 5: Generate markdown
         step += 1
         yield sse("progress", {"step": step, "total": total_steps, "message": "Generating report…"})
 
@@ -217,7 +281,7 @@ async def diagnose_error(
         llm_result["raw_json"]["expert_id"] = expert_id
         markdown = _json_to_markdown(llm_result["raw_json"])
 
-        # Step 5: Save to database
+        # Step 6: Save to database
         step += 1
         yield sse("progress", {"step": step, "total": total_steps, "message": "Saving results…"})
 
@@ -243,9 +307,31 @@ async def diagnose_error(
             incident.grounding_sources = llm_result["sources"]
             incident.file_search_results = llm_result.get("file_search_results", [])
             incident.status = "analyzed"
+            if classification_result:
+                incident.categories = [
+                    {
+                        "category": cat["category"],
+                        "confidence": cat["confidence"],
+                        "primary": i == 0
+                    }
+                    for i, cat in enumerate(classification_result["categories"])
+                ]
+                incident.schema_id = selected_schema_id
+                incident.classification_reasoning = classification_result.get("primary_intent")
             await db.flush()
             await db.refresh(incident)
         else:
+            categories_json = []
+            if classification_result:
+                categories_json = [
+                    {
+                        "category": cat["category"],
+                        "confidence": cat["confidence"],
+                        "primary": i == 0
+                    }
+                    for i, cat in enumerate(classification_result["categories"])
+                ]
+
             incident = Incident(
                 error_text=error_text,
                 image_data=image_bytes,
@@ -262,9 +348,24 @@ async def diagnose_error(
                 file_search_results=llm_result.get("file_search_results", []),
                 source="manual",
                 status="resolved",
+                categories=categories_json,
+                schema_id=selected_schema_id,
+                classification_reasoning=classification_result.get("primary_intent") if classification_result else None,
             )
             db.add(incident)
-            await db.flush()
+            try:
+                await db.flush()
+            except InternalError as e:
+                if "missing chunk" in str(e) or "DataCorruptedError" in str(e):
+                    logger.warning("TOAST corruption detected on insert — repairing corrupted embeddings and retrying")
+                    await db.rollback()
+                    await _repair_corrupted_embeddings(db)
+                    # Retry without embedding to avoid the index touching corrupted rows
+                    incident.embedding = None
+                    db.add(incident)
+                    await db.flush()
+                else:
+                    raise
             await db.refresh(incident)
 
         if parent_session_id:
@@ -301,6 +402,8 @@ async def diagnose_error(
             "file_search_results": llm_result.get("file_search_results", []),
             "usage": llm_result["usage"],
             "similar_incidents": similar,
+            "classification": classification_result,
+            "schema_used": {"id": selected_schema_id, "name": selected_schema_name} if selected_schema_id else None,
         })
 
     return StreamingResponse(

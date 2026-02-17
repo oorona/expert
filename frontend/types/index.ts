@@ -47,6 +47,11 @@ export interface DiagnosisResponse {
   similar_incidents: SimilarIncident[];
   duplicate_of?: SimilarIncident;
   model_used?: string;
+  classification?: ClassificationResult;
+  schema_used?: {
+    id: number;
+    name: string;
+  };
 }
 
 export interface ChatMessage {
@@ -67,6 +72,9 @@ export interface SessionListItem {
   expert_id?: number | null;
   source?: string;
   status?: string;
+  categories?: IncidentCategory[];
+  schema_id?: number | null;
+  classification_reasoning?: string | null;
   created_at: string;
 }
 
@@ -89,6 +97,9 @@ export interface SessionDetail {
   expert_id?: number | null;
   source?: string;
   status?: string;
+  categories?: IncidentCategory[];
+  schema_id?: number | null;
+  classification_reasoning?: string | null;
   created_at: string;
   related_articles: RelatedArticle[];
   chat_messages: ChatMessage[];
@@ -128,10 +139,46 @@ export interface PromptItem {
 export interface SchemaItem {
   id: number;
   name: string;
-  schema_json: Record<string, unknown>;
+  description?: string;
+  json_schema?: Record<string, unknown>; // New schemas table
+  schema_json?: Record<string, unknown>; // Legacy OutputSchema table
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface Category {
+  name: string;
+  display_name: string;
+  description: string;
+  intent_description: string;
+  example_inputs: string[];
+  key_outputs: string[];
+}
+
+export interface IncidentCategory {
+  category: string;
+  confidence: number;
+  primary: boolean;
+}
+
+export interface ClassificationResult {
+  primary_intent: string;
+  categories: Array<{
+    category: string;
+    confidence: number;
+    reasoning: string;
+  }>;
+  extracted_entities?: {
+    error_codes?: string[];
+    system_components?: string[];
+    technologies?: string[];
+    action_verbs?: string[];
+  };
+  recommended_schema?: {
+    id: number;
+    name: string;
+  };
 }
 
 export interface SearchResult {
@@ -144,8 +191,6 @@ export interface SearchResult {
   markdown_content: string;
   score?: number;
 }
-
-// --- Experts ---
 
 export interface ExpertItem {
   id: number;
@@ -190,8 +235,6 @@ export interface StoreDocument {
   update_time: string;
 }
 
-// --- Models ---
-
 export interface ModelInfo {
   id: string;
   label: string;
@@ -200,8 +243,6 @@ export interface ModelInfo {
   supportsFileSearch: boolean;
   supportsGrounding: boolean;
 }
-
-// --- Incoming Errors (API-ingested) ---
 
 export interface IncomingError {
   id: number;
@@ -216,8 +257,6 @@ export interface IncomingError {
   status: string;
   created_at: string;
 }
-
-// --- Client API Keys ---
 
 export interface ApiKeyItem {
   id: number;
