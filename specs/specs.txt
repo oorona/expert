@@ -3,23 +3,23 @@ A secure, AI-driven diagnostic engine designed for high-pressure environments. I
 
 1. INFRASTRUCTURE & SECURITY
 
-    Networking (Docker):
+    Networking (Docker & Traefik):
 
-        internet Network: Public. Contains Frontend and Backend.
+        internet Network: Public. Contains Traefik, Frontend, and Backend.
 
-        intranet Network: Private. Contains Frontend, Backend (FastAPI), and Database (Postgres).
+        intranet Network: Private. Contains Frontend and Backend (FastAPI).
 
-        dbnet Network: Database-only. Contains Database and Backend.
-
-        Logic: The Backend is on both internet (to reach the Gemini API) and intranet
-        (to reach the Database). The Database has no route to the internet.
-        The Frontend proxies all API calls through Next.js route handlers to the
-        Backend over intranet (env var INTERNAL_API_URL). Browser traffic never
-        reaches the Backend directly.
+        Logic: Traefik proxies external traffic via HTTPS (expert.home.iktdts.com)
+        directing it to the Frontend. The Frontend (Next.js) acts as a secure proxy,
+        routing all API calls through its internal route handlers to the Backend over
+        the `intranet` (env var INTERNAL_API_URL). Browser traffic never reaches the
+        Backend directly. The Backend uses an external PostgreSQL database connection
+        (no local db container).
 
     Secrets Management:
 
-        API keys and DB passwords must be handled via Docker Secrets (/run/secrets/).
+        API keys must be handled via Docker Secrets (/run/secrets/). Database
+        connection details are passed via environment variables (POSTGRES_HOST).
 
 2. DATABASE & DATA MANAGEMENT (SOURCE OF TRUTH)
 
