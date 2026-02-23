@@ -1,4 +1,4 @@
-# AI Expert Diagnostic Engine 🧠🤖
+# AI Expert Diagnostic Engine
 
 An advanced, production-ready AI Diagnostic System designed for high-pressure environments. This project leverages state-of-the-art **Artificial Intelligence**, **Machine Learning**, and **Data Science** to autonomously ingest system errors, process screenshots, query external web data, cross-reference internal documentation, and generate highly structured, actionable resolution paths.
 
@@ -6,7 +6,7 @@ Built to mimic the cognitive workflow of a Senior Site Reliability Engineer (SRE
 
 ---
 
-## 🚀 Core AI & Machine Learning Capabilities
+## Core AI & Machine Learning Capabilities
 
 This project isn't just an API wrapper; it incorporates advanced ML search topologies, complex LLM orchestration, reciprocal rank fusion, and multimodal analysis.
 
@@ -38,7 +38,7 @@ Not all problems are best solved with text. This platform uses `imagen-3.0-gener
 
 ---
 
-## 📚 Documentation
+## Documentation
 Detailed documentation regarding installation, configuration, and architecture can be found in the `docs/` directory:
 
 *   **[Installation Guide](docs/INSTALLATION.md)**: Prerequisites and quick-start instructions.
@@ -49,5 +49,5 @@ Detailed documentation regarding installation, configuration, and architecture c
 
 ---
 
-## 📄 License
+## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
