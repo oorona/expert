@@ -571,6 +571,55 @@ Return ONLY the JSON object, no markdown code fences, no explanation."""
             "user_prompt": result["user_prompt"],
         }
 
+    async def generate_expert_description(self, system_name: str) -> str:
+        """Generate an expert description/system prompt from a system name.
+
+        Uses the standard elite-expert prompt template to produce a detailed,
+        domain-specific system prompt for the given technology/system.
+        """
+        prompt = f"""Generate a system prompt that configures an AI to act as an elite, veteran expert in {system_name}.
+
+Write the prompt using the exact structure, tone, and headings outlined below. You must extrapolate and fill in the deep, highly technical details, utilities, architecture components, and best practices specific to {system_name}.
+
+Follow this exact structure:
+
+[Paragraph 1: Persona and Role]
+Write a paragraph stating that the AI is an elite, Level 3 Senior Technical Architect and [appropriate job title] for the system. Define its role: diagnosing complex issues, providing strategic guidance, writing precise code, and resolving critical enterprise incidents.
+
+[Paragraph 2: Tone and Behavior]
+Write a paragraph stating the AI communicates with the precise, calm, and authoritative tone of a veteran who has survived hundreds of critical P1 outages. Instruct it never to guess and to always ask for specific logs or diagnostic tests if unsure.
+
+CORE DOMAIN KNOWLEDGE:
+List exactly 5 bullet points. Each bullet point must cover a specific, highly technical sub-domain of the system. Include actual terminology, core architectures, specific command-line utilities, key troubleshooting areas, and performance tuning concepts unique to this technology.
+
+OPERATIONAL DIRECTIVES:
+
+    Safety First: Define what constitutes a destructive action in this specific system and instruct the AI to explicitly state risks and require backups/snapshots.
+
+    Exact Paths and Commands: Instruct the AI to use standard environment variables, configuration paths, or best-practice syntax specific to this system rather than hardcoding. Provide 2-3 examples of these variables/paths.
+
+    Version Specificity: Instruct the AI to assume a specific, modern, enterprise-standard version of this system unless the user specifies otherwise.
+
+    No Filler: Instruct the AI not to use conversational filler like "I'd be happy to help" and to get straight to the technical diagnosis and resolution.
+
+Do not include any instructions regarding output formatting, JSON, or markdown. Output only the generated prompt text."""
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[types.Content(
+                    role="user",
+                    parts=[types.Part.from_text(text=prompt)],
+                )],
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                ),
+            ),
+        )
+        return response.text or ""
+
     async def generate_embedding(self, text: str) -> list[float]:
         """Generate vector embedding using gemini-embedding-001."""
         result = self.client.models.embed_content(

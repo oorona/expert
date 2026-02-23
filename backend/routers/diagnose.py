@@ -53,24 +53,51 @@ async def _repair_corrupted_embeddings(db: AsyncSession) -> int:
     return 0  # PL/pgSQL doesn't return, but repair is done
 
 
-def _json_to_markdown(data: dict) -> str:
+_MARKDOWN_EXCLUDED_KEYS = {"expert_id", "visual_aid_suggested", "image_generation_prompt"}
+
+_LANGUAGE_MAP = {"sql": "sql", "plsql": "sql", "bash": "bash", "python": "python", "other": ""}
+
+
+def _json_to_markdown(data: dict, original_question: str | None = None) -> str:
     """Convert structured JSON output to readable markdown."""
     lines: list[str] = []
+
+    if original_question:
+        lines.append("## Original Question")
+        lines.append("")
+        lines.append(original_question)
+        lines.append("")
+
     for key, value in data.items():
-        if key == "title":
-            continue  # title is metadata, not a content section
+        if key in ("title", *_MARKDOWN_EXCLUDED_KEYS):
+            continue
         header = key.replace("_", " ").title()
         lines.append(f"## {header}")
         lines.append("")  # blank line after heading
+
+        # Code field (Developer schema): wrap in fenced code block with language hint
+        if key == "code" and isinstance(value, str):
+            lang = _LANGUAGE_MAP.get(data.get("primary_language", ""), "")
+            lines.append(f"```{lang}")
+            lines.append(value)
+            lines.append("```")
+            lines.append("")
+            continue
+
         if isinstance(value, list):
             for i, item in enumerate(value, 1):
-                if isinstance(item, dict) and "action" in item:
-                    lines.append(f"{i}. {item['action']}")
+                if isinstance(item, dict) and "command" in item:
+                    # Steps with a command (action/step_description + optional command)
+                    desc = item.get("action") or item.get("step_description") or ""
+                    if desc:
+                        lines.append(f"{i}. {desc}")
                     if item.get("command"):
                         lines.append("")
                         lines.append("```")
                         lines.append(item["command"])
                         lines.append("```")
+                    if item.get("expected_output"):
+                        lines.append(f"   *Expected output: {item['expected_output']}*")
                     lines.append("")
                 elif isinstance(item, dict):
                     for k, v in item.items():
@@ -279,7 +306,7 @@ async def diagnose_error(
 
         # Add expert_id to raw_json so it's saved with the incident
         llm_result["raw_json"]["expert_id"] = expert_id
-        markdown = _json_to_markdown(llm_result["raw_json"])
+        markdown = _json_to_markdown(llm_result["raw_json"], original_question=error_text or None)
 
         # Step 6: Save to database
         step += 1

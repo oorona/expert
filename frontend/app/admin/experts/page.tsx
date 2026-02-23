@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listExperts, createExpert } from "@/lib/api";
+import { listExperts, createExpert, generateExpertDescription } from "@/lib/api";
 import { ExpertEditor } from "@/components/admin/ExpertEditor";
 import type { ExpertItem } from "@/types";
 
@@ -12,6 +12,7 @@ export default function ExpertsPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [generatingDesc, setGeneratingDesc] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
   const [progressStep, setProgressStep] = useState(0);
   const [progressTotal, setProgressTotal] = useState(0);
@@ -28,6 +29,17 @@ export default function ExpertsPage() {
       // Backend may not be ready
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGenerateDesc() {
+    if (!newName) return;
+    setGeneratingDesc(true);
+    try {
+      const desc = await generateExpertDescription(newName);
+      setNewDesc(desc);
+    } finally {
+      setGeneratingDesc(false);
     }
   }
 
@@ -78,14 +90,36 @@ export default function ExpertsPage() {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Expert name (e.g. Oracle Database, Linux System Admin, Kubernetes)"
+            placeholder="Software/system name (e.g. Oracle Database, Windows Server, Kubernetes)"
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
           />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleGenerateDesc}
+              disabled={generatingDesc || creating || !newName}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded text-sm font-medium hover:bg-purple-700 disabled:bg-gray-400"
+            >
+              {generatingDesc ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Generating…
+                </>
+              ) : (
+                "Generate Description"
+              )}
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Auto-generate from system name, or write your own below
+            </span>
+          </div>
           <textarea
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
-            placeholder="Describe what this expert specializes in. Be specific — this drives the AI prompt generation.&#10;&#10;Example: This expert specializes in Oracle Database administration including ORA errors, performance tuning, RAC clusters, Data Guard, RMAN backup/recovery, tablespace management, and SQL optimization. It should understand Oracle-specific terminology and provide resolution steps using Oracle tools and utilities."
-            className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
+            placeholder="Click &quot;Generate Description&quot; to auto-generate from the system name, or describe what this expert specializes in manually."
+            className="w-full h-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
           />
           <p className="text-xs text-gray-500 dark:text-gray-400">
             The description is used by the AI to generate tailored system and user prompts specific to this expert&apos;s domain.

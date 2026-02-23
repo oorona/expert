@@ -402,6 +402,20 @@ export async function createExpert(
   return res.json();
 }
 
+export async function generateExpertDescription(
+  systemName: string
+): Promise<string> {
+  const data = await fetchJSON<{ description: string }>(
+    `${API_BASE}/experts/generate-description`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ system_name: systemName }),
+    }
+  );
+  return data.description;
+}
+
 export async function updateExpert(
   id: number,
   data: { name?: string; description?: string; is_active?: boolean }

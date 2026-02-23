@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.session import get_db, async_session
 from models.database import Expert, ExpertDocument, Prompt
-from models.schemas import ExpertCreate, ExpertUpdate
+from models.schemas import ExpertCreate, ExpertDescriptionRequest, ExpertDescriptionResponse, ExpertUpdate
 from security import require_api_key, sanitize_filename, validate_file_upload, rate_limit
 from services.gemini import gemini_service
 
@@ -41,6 +41,17 @@ async def list_file_stores():
     except Exception as exc:
         logger.error("Failed to list file search stores: %s", exc)
         raise HTTPException(status_code=502, detail="Failed to list file search stores")
+
+
+@router.post("/experts/generate-description", dependencies=[Depends(require_api_key)])
+async def generate_expert_description(body: ExpertDescriptionRequest) -> ExpertDescriptionResponse:
+    """Generate an expert system prompt/description from a software system name."""
+    try:
+        description = await gemini_service.generate_expert_description(body.system_name)
+        return ExpertDescriptionResponse(description=description)
+    except Exception as exc:
+        logger.error("Failed to generate expert description: %s", exc)
+        raise HTTPException(status_code=502, detail="Failed to generate description")
 
 
 # -----------------------------------------------------------------------

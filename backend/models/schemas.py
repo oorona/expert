@@ -145,13 +145,21 @@ class SearchResult(BaseModel):
 
 class ExpertCreate(BaseModel):
     name: str = Field(..., max_length=200)
-    description: str = Field("", max_length=2000)
+    description: str = Field("", max_length=20000)
 
 
 class ExpertUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = Field(None, max_length=2000)
+    description: Optional[str] = Field(None, max_length=20000)
     is_active: Optional[bool] = None
+
+
+class ExpertDescriptionRequest(BaseModel):
+    system_name: str = Field(..., max_length=200)
+
+
+class ExpertDescriptionResponse(BaseModel):
+    description: str
 
 
 class ExpertDocumentResponse(BaseModel):
