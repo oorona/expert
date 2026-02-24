@@ -10,7 +10,7 @@ This document delves into the application architecture, how data flows between c
 
 ## 2. Component Networking and Data Flow
 The infrastructure relies on Docker's internal networking for isolated and secure connectivity:
-*   External users access the **Next.js Frontend** via a Traefik reverse proxy mapped to `expert.home.iktdts.com`.
+*   External users access the **Next.js Frontend** via a Traefik reverse proxy mapped to the domain specified in the `${DOMAIN}` environment variable.
 *   When a user submits an error (or accesses an API-ingested error), the frontend creates a proxy payload and forwards it using HTTP basic authorization to the **FastAPI Backend**.
 *   The Backend operates inside an isolated `intranet` network and is never exposed directly.
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 from contextlib import asynccontextmanager
 
@@ -190,7 +191,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:4100",
         "http://expert-frontend:3000",
-        "https://expert.home.iktdts.com",
+        f"https://{os.environ.get('DOMAIN', 'expert.home.iktdts.com')}",
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],

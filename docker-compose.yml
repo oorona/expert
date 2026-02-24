@@ -16,7 +16,7 @@ services:
       - intranet
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.expert-frontend.rule=Host(`expert.home.iktdts.com`)"
+      - "traefik.http.routers.expert-frontend.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.expert-frontend.entrypoints=websecure"
       - "traefik.http.routers.expert-frontend.tls=true"
       - "traefik.http.services.expert-frontend.loadbalancer.server.port=3000"

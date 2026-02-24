@@ -27,12 +27,13 @@ Ensure you have the following installed on your host machine:
 4. **Deploy the Application**
    ```bash
    export POSTGRES_HOST=your.external.db.hostname
+   export DOMAIN=expert.yourdomain.com
    docker compose up -d --build
    ```
 
 5. **Verify the Deployment**
-   Once the containers are running securely behind Traefik, access the Next.js frontend at:
-   `https://expert.home.iktdts.com`
+   Once the containers are running securely behind Traefik, access the Next.js frontend at the domain you specified:
+   `https://$DOMAIN`
 
 ## Quick Start
 1. Log in to the application and navigate to the **Admin Dashboard -> Expert Manager**.

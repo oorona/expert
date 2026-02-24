@@ -9,7 +9,7 @@ A secure, AI-driven diagnostic engine designed for high-pressure environments. I
 
         intranet Network: Private. Contains Frontend and Backend (FastAPI).
 
-        Logic: Traefik proxies external traffic via HTTPS (expert.home.iktdts.com)
+        Logic: Traefik proxies external traffic via HTTPS (configured via the `${DOMAIN}` env var)
         directing it to the Frontend. The Frontend (Next.js) acts as a secure proxy,
         routing all API calls through its internal route handlers to the Backend over
         the `intranet` (env var INTERNAL_API_URL). Browser traffic never reaches the

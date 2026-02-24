@@ -25,6 +25,6 @@ The following environment variables drive the application logic and must be tail
 
 ## Traefik Reverse Proxy Config
 The `docker-compose.yml` configures the frontend to be available externally via a Traefik proxy on the `internet` network.
-*   It exposes the frontend using the `expert.home.iktdts.com` domain.
+*   It exposes the frontend using the `${DOMAIN}` environment variable (e.g., `DOMAIN=expert.home.iktdts.com`).
 *   It automatically applies `tls=true` and sets the entrypoint to `websecure`.
 *   Note: The backend is intentionally isolated alongside the frontend in the `intranet` network and is **not** exposed to Traefik directly. All external traffic is routed via Next.js server-side API endpoints contextually to ensure maximum security.
