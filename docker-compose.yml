@@ -16,6 +16,7 @@ services:
       - intranet
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=internet"
       - "traefik.http.routers.expert-frontend.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.expert-frontend.entrypoints=websecure"
       - "traefik.http.routers.expert-frontend.tls=true"
