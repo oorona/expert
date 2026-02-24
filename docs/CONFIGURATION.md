@@ -12,7 +12,13 @@ Ensure the following files exist locally before deploying, as they are securely 
 *   `secrets/gemini_api_key.txt`: Your Google Gemini SDK Token.
 
 ## Environment Variables
-The following environment variables drive the application logic and must be tailored to your deployment:
+The application utilizes a `.env` file at the root of the project to drive all dynamic configurations, ensuring no URLs or structural components are hardcoded into the `docker-compose.yml`.
+
+Copy the provided `.env.example` file and configure it for your deployment environment:
+
+```bash
+cp .env.example .env
+```
 
 ### `backend`
 *   `POSTGRES_USER`: Target database username (e.g., `expert`).
@@ -20,7 +26,7 @@ The following environment variables drive the application logic and must be tail
 *   `POSTGRES_HOST`: The FQDN or IP of your external PostgreSQL server. Ensure this database exists prior to starting the service.
 
 ### `frontend`
-*   `INTERNAL_API_URL`: Set to `http://expert-backend:8000` to allow the Next.js `app/api/...` routes to securely proxy traffic internally to FastAPI over the `intranet` Docker network.
+*   `INTERNAL_API_URL`: Controls how the Next.js `app/api/...` routes proxy traffic internally to FastAPI over the `intranet` Docker network. Defaults to `http://expert-backend:8000`. Do not change this unless modifying Docker network topologies.
 *   `NODE_ENV`: Should be `production` for optimized React builds.
 
 ## Traefik Reverse Proxy Config

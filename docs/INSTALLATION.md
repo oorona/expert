@@ -22,12 +22,14 @@ Ensure you have the following installed on your host machine:
    Ensure your external PostgreSQL instance has an empty database named `expert` and a user named `expert` with appropriate privileges. The backend application will automatically create all tables and perform necessary schema migrations upon startup using Alembic. You **do not** need to manually deploy the tables.
 
 3. **Configure Secrets & Environment**
-   Please see the [Configuration Guide](CONFIGURATION.md) to set up your `.env` variables and Docker Secrets (for API keys and database passwords).
+   Please see the [Configuration Guide](CONFIGURATION.md) to set up your `.env` variables and Docker Secrets (for API keys and database passwords). Create your `.env` from the `.env.example`.
+   ```bash
+   cp .env.example .env
+   # Edit .env and your secrets before deploying!
+   ```
 
 4. **Deploy the Application**
    ```bash
-   export POSTGRES_HOST=your.external.db.hostname
-   export DOMAIN=expert.yourdomain.com
    docker compose up -d --build
    ```
 

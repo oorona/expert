@@ -8,8 +8,8 @@ services:
     ports:
       - "4100:3000"
     environment:
-      - NODE_ENV=production
-      - INTERNAL_API_URL=http://expert-backend:8000
+      - NODE_ENV=${NODE_ENV:-production}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-http://expert-backend:8000}
       - API_KEY_FILE=/run/secrets/api_key
     networks:
       - internet
@@ -33,10 +33,9 @@ services:
     container_name: expert-backend
     restart: always
     environment:
-      - POSTGRES_USER=expert
-      # Note: set POSGTRES_HOST to your external database in production.
-      - POSTGRES_HOST=expert-db
-      - POSTGRES_DB=expert
+      - POSTGRES_USER=${POSTGRES_USER:-expert}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_DB=${POSTGRES_DB:-expert}
     volumes:
       - ./backend/schemas:/app/schemas
       - ./backend/backups:/app/backups
