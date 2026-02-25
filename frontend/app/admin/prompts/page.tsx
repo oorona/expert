@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listPrompts, updatePrompt, createPrompt, listExperts } from "@/lib/api";
+import { listPrompts, updatePrompt, createPrompt, listExperts, reloadDefaults } from "@/lib/api";
 import { PromptEditor } from "@/components/admin/PromptEditor";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { useToast } from "@/components/ui/Toast";
 import type { PromptItem, ExpertItem } from "@/types";
 
 const TABS = [
@@ -13,11 +15,13 @@ const TABS = [
 ];
 
 export default function PromptsPage() {
+  const toast = useToast();
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
   const [experts, setExperts] = useState<ExpertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [pendingReload, setPendingReload] = useState(false);
 
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("system");
@@ -78,11 +82,22 @@ export default function PromptsPage() {
     await loadPrompts();
   }
 
+  async function confirmReloadDefaults() {
+    setPendingReload(false);
+    try {
+      await reloadDefaults();
+      await loadPrompts();
+      toast.success("Template prompts reloaded from disk");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reload failed");
+    }
+  }
+
   const tabPrompts = prompts.filter(
-        (p) =>
-          p.prompt_type === TABS[activeTab].type &&
-          p.prompt_category === TABS[activeTab].category
-      );
+    (p) =>
+      p.prompt_type === TABS[activeTab].type &&
+      p.prompt_category === TABS[activeTab].category
+  );
 
   if (loading) {
     return <p className="text-center text-gray-500 dark:text-gray-400 py-8">Loading...</p>;
@@ -92,13 +107,32 @@ export default function PromptsPage() {
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold dark:text-gray-100">Prompt Manager</h2>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700"
-        >
-          + New Prompt
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPendingReload(true)}
+            className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-medium hover:bg-amber-700"
+            title="Reload template prompts from disk (resets to default files)"
+          >
+            Reload Defaults
+          </button>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700"
+          >
+            + New Prompt
+          </button>
+        </div>
       </div>
+
+      {pendingReload && (
+        <InlineConfirm
+          message="Reload all template prompts from disk? This will overwrite current template prompt content."
+          confirmLabel="Reload"
+          variant="warning"
+          onConfirm={confirmReloadDefaults}
+          onCancel={() => setPendingReload(false)}
+        />
+      )}
 
       {/* Expert filter */}
       <select

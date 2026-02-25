@@ -331,6 +331,10 @@ export async function updateSchemaCategoryMappings(
   });
 }
 
+export async function reloadDefaults(): Promise<{ status: string; message: string }> {
+  return fetchJSON(`${API_BASE}/admin/reload-defaults`, { method: "POST" });
+}
+
 // --- Experts ---
 
 export async function listExperts(): Promise<ExpertItem[]> {

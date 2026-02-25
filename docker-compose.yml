@@ -37,7 +37,7 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_DB=${POSTGRES_DB:-expert}
     volumes:
-      - ./backend/schemas:/app/schemas
+      - ./backend/db:/app/db
       - ./backend/backups:/app/backups
     networks:
       - internet

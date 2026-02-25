@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listSchemas, updateSchema, createSchema } from "@/lib/api";
+import { listSchemas, updateSchema, createSchema, reloadDefaults } from "@/lib/api";
 import { SchemaEditor } from "@/components/admin/SchemaEditor";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
+import { useToast } from "@/components/ui/Toast";
 import type { SchemaItem } from "@/types";
 
 export default function SchemasPage() {
+  const toast = useToast();
   const [schemas, setSchemas] = useState<SchemaItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newJson, setNewJson] = useState('{\n  "type": "object",\n  "properties": {}\n}');
+  const [pendingReload, setPendingReload] = useState(false);
 
   useEffect(() => {
     loadSchemas();
@@ -53,6 +57,17 @@ export default function SchemasPage() {
     }
   }
 
+  async function confirmReloadDefaults() {
+    setPendingReload(false);
+    try {
+      await reloadDefaults();
+      await loadSchemas();
+      toast.success("Schemas reloaded from disk");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reload failed");
+    }
+  }
+
   const selectedSchema = schemas.find((s) => s.id === selectedId) ?? null;
 
   if (loading) {
@@ -63,13 +78,32 @@ export default function SchemasPage() {
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold dark:text-gray-100">Schema Manager</h2>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700"
-        >
-          + New Schema
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPendingReload(true)}
+            className="px-3 py-1.5 bg-amber-600 text-white rounded text-sm font-medium hover:bg-amber-700"
+            title="Reload schemas from disk (resets to default files in db/schemas/definitions/)"
+          >
+            Reload Defaults
+          </button>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700"
+          >
+            + New Schema
+          </button>
+        </div>
       </div>
+
+      {pendingReload && (
+        <InlineConfirm
+          message="Reload all schemas from disk? This will overwrite current schema content with the on-disk defaults."
+          confirmLabel="Reload"
+          variant="warning"
+          onConfirm={confirmReloadDefaults}
+          onCancel={() => setPendingReload(false)}
+        />
+      )}
 
       {/* Schema selector */}
       <select

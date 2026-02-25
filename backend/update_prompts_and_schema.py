@@ -41,7 +41,7 @@ async def update_schema():
     print("Updating output schema...")
 
     # Load the updated schema from file
-    schema_path = Path(__file__).parent / "data" / "schemas" / "diagnostic_output.json"
+    schema_path = Path(__file__).parent / "db" / "schemas" / "definitions" / "diagnostic_output.json"
     with open(schema_path, "r") as f:
         new_schema = json.load(f)
 

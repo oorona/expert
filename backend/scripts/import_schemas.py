@@ -14,7 +14,7 @@ from models.database import Schema
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SCHEMAS_DIR = Path(__file__).parent.parent / "schemas" / "definitions"
+SCHEMAS_DIR = Path(__file__).parent.parent / "db" / "schemas" / "definitions"
 MANIFEST_FILE = SCHEMAS_DIR / "schemas_manifest.json"
 
 

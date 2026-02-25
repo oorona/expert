@@ -23,7 +23,28 @@ from security import require_api_key
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SCHEMAS_DIR = Path(__file__).parent.parent / "schemas" / "definitions"
+SCHEMAS_DIR = Path(__file__).parent.parent / "db" / "schemas" / "definitions"
+PROMPTS_DIR = Path(__file__).parent.parent / "db" / "prompts" / "templates"
+
+_PROMPT_TEMPLATE_FILES = {
+    "Template - System (grounded)":    "grounded_system.txt",
+    "Template - User (grounded)":      "grounded_user.txt",
+    "Template - System (file_search)": "file_search_system.txt",
+    "Template - User (file_search)":   "file_search_user.txt",
+}
+
+
+def _sync_prompt_to_disk(prompt: "Prompt") -> None:
+    """Write a template prompt's content back to its canonical disk file."""
+    filename = _PROMPT_TEMPLATE_FILES.get(prompt.name)
+    if not filename:
+        return  # not a template prompt — skip
+    try:
+        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+        (PROMPTS_DIR / filename).write_text(prompt.content)
+        logger.info("Synced prompt '%s' to disk: %s", prompt.name, filename)
+    except Exception as exc:
+        logger.warning("Failed to sync prompt to disk: %s", exc)
 
 
 async def _auto_export_schemas(db: AsyncSession) -> None:
@@ -65,6 +86,29 @@ async def _auto_export_schemas(db: AsyncSession) -> None:
         logger.info("Auto-exported %d schemas to %s", len(schemas), SCHEMAS_DIR)
     except Exception as exc:
         logger.warning("Auto-export schemas failed: %s", exc)
+
+
+async def _auto_export_categories(db: AsyncSession) -> None:
+    """Write all categories to categories_manifest.json after any category change."""
+    try:
+        SCHEMAS_DIR.mkdir(parents=True, exist_ok=True)
+        result = await db.execute(select(Category).order_by(Category.name))
+        categories = result.scalars().all()
+        manifest = [
+            {
+                "name": c.name,
+                "display_name": c.display_name,
+                "description": c.description,
+                "intent_description": c.intent_description,
+                "example_inputs": c.example_inputs or [],
+                "key_outputs": c.key_outputs or [],
+            }
+            for c in categories
+        ]
+        (SCHEMAS_DIR / "categories_manifest.json").write_text(json.dumps(manifest, indent=2))
+        logger.info("Auto-exported %d categories to %s", len(categories), SCHEMAS_DIR)
+    except Exception as exc:
+        logger.warning("Auto-export categories failed: %s", exc)
 
 
 # --- Prompts ---
@@ -140,6 +184,11 @@ async def update_prompt(
 
     await db.flush()
     await db.refresh(prompt)
+
+    # Keep disk in sync for template prompts
+    if body.content is not None:
+        _sync_prompt_to_disk(prompt)
+
     return prompt.to_dict()
 
 
@@ -475,3 +524,27 @@ async def clear_expired_caches():
         "status": "success",
         "cleared_count": cleared_count,
     }
+
+
+# --- Reload Defaults ---
+
+
+@router.post("/reload-defaults", dependencies=[Depends(require_api_key)])
+async def reload_defaults(db: AsyncSession = Depends(get_db)):
+    """Reload prompt templates, categories and schemas from disk, overwriting DB values.
+
+    Canonical on-disk locations:
+      - backend/db/prompts/templates/          (prompt templates)
+      - backend/db/schemas/definitions/        (schemas + category mappings)
+      - backend/db/schemas/definitions/categories_manifest.json  (categories)
+    """
+    from db.init import reload_defaults as _reload
+
+    await _reload(db)
+    await db.commit()
+
+    # Re-export everything back to disk so the files reflect the final DB state
+    await _auto_export_schemas(db)
+    await _auto_export_categories(db)
+
+    return {"status": "ok", "message": "Defaults reloaded from disk"}
