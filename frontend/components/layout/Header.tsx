@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/admin/prompts", label: "Prompts" },
   { href: "/admin/schemas", label: "Schemas" },
   { href: "/admin/api-keys", label: "API Keys" },
+  { href: "/observability", label: "LLM Logs" },
 ];
 
 const THEME_ICONS: Record<string, string> = {

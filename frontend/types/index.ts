@@ -268,3 +268,63 @@ export interface ApiKeyItem {
   key_preview: string;
   raw_key?: string; // Only present on creation
 }
+
+// ---------------------------------------------------------------------------
+// LLM Observability
+// ---------------------------------------------------------------------------
+
+export interface LLMCall {
+  id: number;
+  event_id: number;
+  call_index: number;
+  call_type: string;
+  model: string;
+  temperature: number | null;
+  thinking_level: string | null;
+  extra_params: Record<string, unknown>;
+  prompt_name: string | null;
+  prompt_text: string | null;
+  response_text: string | null;
+  is_streaming: boolean;
+  is_image_call: boolean;
+  image_data: string | null;
+  image_prompt: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  thinking_tokens: number;
+  time_to_first_token_ms: number | null;
+  total_duration_ms: number | null;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface LLMEvent {
+  id: number;
+  event_type: string;
+  entity_type: string | null;
+  entity_id: number | null;
+  session_id: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  call_count: number;
+  total_tokens: number;
+  calls?: LLMCall[];
+}
+
+export interface ObservabilityStats {
+  total_events: number;
+  total_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cache_tokens: number;
+  total_thinking_tokens: number;
+  avg_duration_ms: number | null;
+  events_by_type: Record<string, number>;
+}

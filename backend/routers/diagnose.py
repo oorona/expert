@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import uuid as uuid_mod
 from typing import Optional
 
@@ -22,6 +23,7 @@ from security import (
 )
 from services.classification import classification_service
 from services.gemini import gemini_service
+from services.llm_logger import llm_logger
 from services.similarity import find_similar_incidents, normalize_error_text
 
 logger = logging.getLogger(__name__)
@@ -274,29 +276,87 @@ async def diagnose_error(
         step += 1
         yield sse("progress", {"step": step, "total": total_steps, "message": "Analyzing with Gemini…"})
 
+        # --- LLM observability: create event before the call ---
+        log_event = await llm_logger.create_event(
+            db,
+            "diagnose",
+            entity_type="incident",
+            entity_id=incident_id,
+            metadata={
+                "model": model,
+                "expert_id": expert_id,
+                "thinking_level": thinking_level,
+                "use_grounding": use_grounding,
+                "use_file_search": use_file_search,
+                "schema_id": selected_schema_id,
+            },
+        )
+
         llm_result = None
-        async for item in gemini_service.diagnose_error_stream(
-            error_text=error_text,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
-            system_prompt=system_prompt_content,
-            user_prompt=user_prompt,
-            output_schema=output_schema,
-            model=model,
-            temperature=temperature,
-            thinking_level=thinking_level,
-            use_grounding=use_grounding,
-            use_file_search=use_file_search,
-            file_search_store_names=file_search_store_names,
-            expert_id=expert_id,
-            prompt_category=prompt_category,
-        ):
-            if item["type"] == "thought":
-                yield sse("thought", {"text": item["text"]})
-            elif item["type"] == "result":
-                llm_result = item["data"]
+        _call_start = time.monotonic()
+        _first_token_ms = None
+        try:
+            async for item in gemini_service.diagnose_error_stream(
+                error_text=error_text,
+                image_bytes=image_bytes,
+                image_mime=image_mime,
+                system_prompt=system_prompt_content,
+                user_prompt=user_prompt,
+                output_schema=output_schema,
+                model=model,
+                temperature=temperature,
+                thinking_level=thinking_level,
+                use_grounding=use_grounding,
+                use_file_search=use_file_search,
+                file_search_store_names=file_search_store_names,
+                expert_id=expert_id,
+                prompt_category=prompt_category,
+            ):
+                if item["type"] == "thought":
+                    if _first_token_ms is None:
+                        _first_token_ms = int((time.monotonic() - _call_start) * 1000)
+                    yield sse("thought", {"text": item["text"]})
+                elif item["type"] == "result":
+                    llm_result = item["data"]
+        except Exception as _llm_exc:
+            _call_ms = int((time.monotonic() - _call_start) * 1000)
+            await llm_logger.log_call(
+                db,
+                log_event.id if log_event else None,
+                0,
+                "text",
+                model,
+                temperature=temperature,
+                thinking_level=thinking_level,
+                prompt_name=user_row.name if user_row else None,
+                prompt_text=error_text,
+                is_streaming=True,
+                total_duration_ms=_call_ms,
+                status="failed",
+                error_message=str(_llm_exc),
+            )
+            await llm_logger.complete_event(db, log_event, status="failed")
+            raise
+
+        _call_ms = int((time.monotonic() - _call_start) * 1000)
 
         if not llm_result:
+            await llm_logger.log_call(
+                db,
+                log_event.id if log_event else None,
+                0,
+                "text",
+                model,
+                temperature=temperature,
+                thinking_level=thinking_level,
+                prompt_name=user_row.name if user_row else None,
+                prompt_text=error_text,
+                is_streaming=True,
+                total_duration_ms=_call_ms,
+                status="failed",
+                error_message="No result from Gemini",
+            )
+            await llm_logger.complete_event(db, log_event, status="failed")
             yield sse("error", {"message": "No result from Gemini"})
             return
 
@@ -417,6 +477,29 @@ async def diagnose_error(
                         relation_type="parent",
                     ))
                     await db.flush()
+
+        # --- LLM observability: log the successful call ---
+        await llm_logger.log_call(
+            db,
+            log_event.id if log_event else None,
+            0,
+            "text",
+            model,
+            temperature=temperature,
+            thinking_level=thinking_level,
+            prompt_name=user_row.name if user_row else None,
+            prompt_text=error_text,
+            response_text=markdown,
+            is_streaming=True,
+            usage=llm_result.get("usage"),
+            time_to_first_token_ms=_first_token_ms,
+            total_duration_ms=_call_ms,
+            status="success",
+        )
+        if log_event:
+            log_event.entity_id = incident.id
+            log_event.session_id = str(incident.session_id)
+        await llm_logger.complete_event(db, log_event, status="success")
 
         await db.commit()
 

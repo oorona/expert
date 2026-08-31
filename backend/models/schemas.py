@@ -181,3 +181,66 @@ class ExpertResponse(BaseModel):
     document_count: int = 0
     created_at: str
     updated_at: str
+
+
+# ---------------------------------------------------------------------------
+# LLM Observability
+# ---------------------------------------------------------------------------
+
+class LLMCallResponse(BaseModel):
+    id: int
+    event_id: int
+    call_index: int
+    call_type: str
+    model: str
+    temperature: Optional[float] = None
+    thinking_level: Optional[str] = None
+    extra_params: dict = {}
+    prompt_name: Optional[str] = None
+    prompt_text: Optional[str] = None
+    response_text: Optional[str] = None
+    is_streaming: bool = False
+    is_image_call: bool = False
+    image_data: Optional[str] = None
+    image_prompt: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    thinking_tokens: int = 0
+    time_to_first_token_ms: Optional[int] = None
+    total_duration_ms: Optional[int] = None
+    status: str
+    error_message: Optional[str] = None
+    created_at: str
+
+
+class LLMEventResponse(BaseModel):
+    id: int
+    event_type: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    session_id: Optional[str] = None
+    status: str
+    metadata: dict = {}
+    started_at: str
+    completed_at: Optional[str] = None
+    duration_ms: Optional[int] = None
+    created_at: str
+    call_count: int = 0
+    total_tokens: int = 0
+
+
+class LLMEventDetail(LLMEventResponse):
+    calls: list[LLMCallResponse] = []
+
+
+class ObservabilityStatsResponse(BaseModel):
+    total_events: int = 0
+    total_calls: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cache_tokens: int = 0
+    total_thinking_tokens: int = 0
+    avg_duration_ms: Optional[float] = None
+    events_by_type: dict = {}

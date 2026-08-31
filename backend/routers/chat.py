@@ -1,4 +1,5 @@
 import difflib
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -15,6 +16,7 @@ from security import (
     validate_temperature,
 )
 from services.gemini import gemini_service
+from services.llm_logger import llm_logger
 
 router = APIRouter()
 
@@ -73,7 +75,18 @@ async def send_chat_message(
             }
         )
 
+    # Create observability event
+    log_event = await llm_logger.create_event(
+        db,
+        "chat",
+        entity_type="incident",
+        entity_id=incident_id,
+        session_id=str(incident.session_id),
+        metadata={"model": body.model},
+    )
+
     # Call Gemini
+    _start = time.monotonic()
     llm_result = await gemini_service.chat_followup(
         system_prompt=system_prompt,
         history=history,
@@ -81,6 +94,24 @@ async def send_chat_message(
         model=body.model,
         temperature=body.temperature,
     )
+    _duration_ms = int((time.monotonic() - _start) * 1000)
+
+    # Log the call
+    await llm_logger.log_call(
+        db,
+        log_event.id if log_event else None,
+        0,
+        "text",
+        body.model,
+        temperature=body.temperature,
+        prompt_name=system_row.name if system_row else None,
+        prompt_text=body.message,
+        response_text=llm_result["content"],
+        usage=llm_result["usage"],
+        total_duration_ms=_duration_ms,
+        status="success",
+    )
+    await llm_logger.complete_event(db, log_event, status="success")
 
     # Generate diff if this is an update request
     diff_content = None

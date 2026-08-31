@@ -398,3 +398,81 @@ class SchemaCategory(Base):
         Index("idx_schema_categories_schema", "schema_id"),
         Index("idx_schema_categories_category", "category_name"),
     )
+
+
+# ---------------------------------------------------------------------------
+# LLM Observability — Events and Calls
+# ---------------------------------------------------------------------------
+
+class LLMEvent(Base):
+    __tablename__ = "llm_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="'pending'")
+    metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="'{}'")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    calls: Mapped[list["LLMCall"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("idx_llm_events_type", "event_type"),
+        Index("idx_llm_events_status", "status"),
+        Index("idx_llm_events_created", "created_at"),
+        Index("idx_llm_events_entity", "entity_type", "entity_id"),
+    )
+
+
+class LLMCall(Base):
+    __tablename__ = "llm_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("llm_events.id", ondelete="CASCADE"), nullable=False
+    )
+    call_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    call_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default="'text'")
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    thinking_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    extra_params: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="'{}'")
+    prompt_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_streaming: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    is_image_call: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    thinking_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    time_to_first_token_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="'success'")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    event: Mapped["LLMEvent"] = relationship(back_populates="calls")
+
+    __table_args__ = (
+        Index("idx_llm_calls_event", "event_id"),
+        Index("idx_llm_calls_model", "model"),
+        Index("idx_llm_calls_created", "created_at"),
+        Index("idx_llm_calls_type", "call_type"),
+    )

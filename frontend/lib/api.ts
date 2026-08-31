@@ -9,6 +9,9 @@ import type {
   ExpertItem,
   FileSearchStore,
   IncomingError,
+  LLMCall,
+  LLMEvent,
+  ObservabilityStats,
   PromptItem,
   SchemaItem,
   SearchResult,
@@ -637,4 +640,42 @@ export async function classifyInput(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_input: userInput, model }),
   });
+}
+
+// --- LLM Observability ---
+
+export async function listObservabilityEvents(params?: {
+  event_type?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<LLMEvent[]> {
+  const qs = new URLSearchParams();
+  if (params?.event_type) qs.set("event_type", params.event_type);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.date_from) qs.set("date_from", params.date_from);
+  if (params?.date_to) qs.set("date_to", params.date_to);
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.offset != null) qs.set("offset", String(params.offset));
+  const q = qs.toString();
+  return fetchJSON(`${API_BASE}/observability/events${q ? `?${q}` : ""}`);
+}
+
+export async function getObservabilityEvent(id: number): Promise<LLMEvent> {
+  return fetchJSON(`${API_BASE}/observability/events/${id}`);
+}
+
+export async function searchObservability(
+  q: string,
+  search_type: "text" | "hybrid" = "text",
+  limit = 20
+): Promise<(LLMCall & { event_type: string; entity_type: string | null; entity_id: number | null; session_id: string | null })[]> {
+  const qs = new URLSearchParams({ q, search_type, limit: String(limit) });
+  return fetchJSON(`${API_BASE}/observability/search?${qs}`);
+}
+
+export async function getObservabilityStats(): Promise<ObservabilityStats> {
+  return fetchJSON(`${API_BASE}/observability/stats`);
 }

@@ -37,4 +37,6 @@ logs/
 # IMPORTANT: Do NOT ignore backups - these are critical for disaster recovery!
 # /backend/backups/  ← DO NOT ADD THIS LINE
 # /backend/prompts/exports/  ← DO NOT ADD THIS LINE
-# /backend/schemas/definitions/  ← DO NOT ADD THIS LINE
+# /backend/schemas/definitions/  ← DO NOT ADD THIS LINE.env
+.env.*
+!.env.example

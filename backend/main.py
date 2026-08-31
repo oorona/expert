@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from db.session import async_session, engine
 from db.init import seed_defaults
-from routers import admin, chat, classify, diagnose, documents, experts, images, incidents, ingest, search
+from routers import admin, chat, classify, diagnose, documents, experts, images, incidents, ingest, observability, search
 from services.gemini import gemini_service
 from services.similarity import normalize_error_text
 
@@ -217,6 +217,7 @@ app.include_router(experts.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(admin.router, prefix="/api/admin")
 app.include_router(search.router, prefix="/api")
+app.include_router(observability.router, prefix="/api")
 
 
 @app.get("/health")
